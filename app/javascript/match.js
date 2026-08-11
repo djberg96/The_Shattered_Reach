@@ -88,6 +88,21 @@ export function mountMatch(root) {
     root.querySelector(".ship-schematic")?.addEventListener("keydown", (event) => {
       if (event.key === "Escape") { selectedShipId = null; render(); }
     });
+    const displayWeaponArcs = (module) => {
+      const arcs = module.dataset.arcs.split(" ");
+      root.querySelectorAll(".weapon-module").forEach((entry) => entry.classList.toggle("selected", entry === module));
+      root.querySelectorAll(".arc-hex[data-arcs]").forEach((cell) => {
+        const cellArcs = cell.dataset.arcs.split(" ");
+        cell.classList.toggle("active", cellArcs.some((arc) => arcs.includes(arc)));
+      });
+      const readout = root.querySelector(".arc-readout b");
+      if (readout) readout.textContent = `${module.dataset.weaponLabel} · ${arcs.join("/")}`;
+    };
+    root.querySelectorAll(".weapon-module").forEach((module) => {
+      module.addEventListener("mouseenter", () => displayWeaponArcs(module));
+      module.addEventListener("focus", () => displayWeaponArcs(module));
+      module.addEventListener("click", () => displayWeaponArcs(module));
+    });
   };
   const render = () => {
     const current = mine(); const target = enemy();

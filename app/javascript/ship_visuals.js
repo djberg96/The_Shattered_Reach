@@ -67,6 +67,30 @@ export function shipGlyph(ship, className = "") {
   return `<svg class="ship-glyph ${className}" viewBox="-44 -44 88 88" aria-hidden="true"><g class="ship-token fleet-${ship.fleet}">${shipHull(ship)}</g></svg>`;
 }
 
+const hexPoints = (x, y, size = 45) => Array.from({ length: 6 }, (_, index) => {
+  const angle = (60 * index) * Math.PI / 180;
+  return `${(x + size * Math.cos(angle)).toFixed(1)},${(y + size * Math.sin(angle)).toFixed(1)}`;
+}).join(" ");
+
+const arcHexCluster = (ship) => {
+  const weapon = ship.weapons.find((entry) => !entry.destroyed) || ship.weapons[0];
+  const selectedArcs = weapon?.arc || [];
+  const cells = [
+    { x: 0, y: -78, arcs: ["F"], label: "F" },
+    { x: 67.5, y: -39, arcs: ["F", "R"], label: "F/R" },
+    { x: 67.5, y: 39, arcs: ["R", "A"], label: "R/A" },
+    { x: 0, y: 78, arcs: ["A"], label: "A" },
+    { x: -67.5, y: 39, arcs: ["A", "L"], label: "A/L" },
+    { x: -67.5, y: -39, arcs: ["L", "F"], label: "L/F" }
+  ];
+  const outerHexes = cells.map((cell) => {
+    const active = cell.arcs.some((arc) => selectedArcs.includes(arc));
+    return `<g class="arc-hex ${active ? "active" : ""}" data-arcs="${cell.arcs.join(" ")}"><polygon points="${hexPoints(cell.x, cell.y)}"/><text x="${cell.x}" y="${cell.y + 3}">${cell.label}</text></g>`;
+  }).join("");
+
+  return `<div class="arc-vignette"><div class="arc-readout"><span>Firing solution</span><b>${weapon ? `${WEAPONS[weapon.type].label} · ${selectedArcs.join("/")}` : "No weapons online"}</b></div><svg class="arc-hex-cluster" viewBox="-125 -130 250 260" aria-label="Firing arc diagram"><g class="arc-hex center"><polygon points="${hexPoints(0, 0)}"/></g>${outerHexes}</svg></div>`;
+};
+
 const trackBoxes = (count, active, kind, startAt = 1) => Array.from({ length: count }, (_, index) => {
   const online = index < active;
   return `<span class="track-box ${online ? "online" : "spent"} ${kind}">${index + startAt}</span>`;
@@ -97,7 +121,7 @@ const weaponModule = (weapon, ship, hidden) => {
   const charged = !hidden && (weapon.type === "missile" || ship.allocation.weapons.includes(weapon.id));
   const state = weapon.destroyed ? "destroyed" : weapon.fired ? "fired" : charged ? "charged" : "standby";
   const resource = weapon.type === "missile" ? `${weapon.ammo ?? 0} missiles` : `${profile.energy} energy`;
-  return `<article class="weapon-module ${state}">
+  return `<article class="weapon-module ${state}" data-arcs="${weapon.arc.join(" ")}" data-weapon-label="${profile.label}" tabindex="0">
     <div class="hardpoint"><span>${weapon.type === "beam" ? "LB" : weapon.type === "driver" ? "MD" : "SM"}</span></div>
     <div><h4>${profile.label}</h4><p>Arc ${weapon.arc.join(" · ")} <i>${resource}</i></p></div>
     <strong>${hidden ? "UNREVEALED" : state.toUpperCase()}</strong>
@@ -141,14 +165,13 @@ export function shipSchematic(ship, state, player) {
         </div>
         <div class="schematic-vessel">
           ${systemTrack("Forward shield", maxFrontShields, ship.shields.front, "shield", "forward hemisphere", shieldColumns)}
-          <div class="schematic-hull"><div class="bearing bearing-front">FORWARD</div>${shipGlyph(ship, "ship-glyph-schematic")}<div class="scan-ring ring-one"></div><div class="scan-ring ring-two"></div></div>
+          <div class="schematic-hull">${arcHexCluster(ship)}${shipGlyph(ship, "ship-glyph-schematic")}</div>
           ${systemTrack("Aft shield", maxAftShields, ship.shields.aft, "shield", "aft hemisphere", shieldColumns)}
           <div class="weapon-rack">${ship.weapons.map((weapon) => weaponModule(weapon, ship, privateAllocation)).join("")}</div>
         </div>
         <div class="schematic-reference">
           <section class="ship-readout"><h3>Live readout</h3><dl><div><dt>Facing</dt><dd>${ship.position[2]}</dd></div><div><dt>Hex</dt><dd>${ship.position[1] + Math.floor(ship.position[0] / 2) + 1}${String(ship.position[0] + 1).padStart(2, "0")}</dd></div><div><dt>Impulse</dt><dd>${state.impulse}</dd></div><div><dt>Energy</dt><dd>${availableEnergy}</dd></div></dl></section>
           ${weaponTypes.map(weaponChart).join("")}
-          <section class="arc-legend"><h3>Firing arcs</h3><div><span>F</span>Forward <span>L</span>Port <span>R</span>Starboard <span>A</span>Aft</div></section>
         </div>
       </div>
     </section>
