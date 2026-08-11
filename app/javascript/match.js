@@ -25,9 +25,26 @@ export function mountMatch(root) {
       <div><p class="eyebrow">${fleet(ship.fleet)} · ${ship.size}</p><h3>${ship.name}</h3>
       <dl><div><dt>Hull</dt><dd>${ship.hull}/${ship.max_hull}</dd></div><div><dt>Shields</dt><dd>F ${ship.shields.front} · A ${ship.shields.aft}</dd></div><div><dt>Energy</dt><dd>${ship.energy - ship.damage.engines}</dd></div></dl></div>
     </article>`;
+  const center = (q, r) => [390 + (48.5 * q) + (24.25 * r), 255 + (42 * r)];
+  const polygon = (x, y, size = 28) => Array.from({ length: 6 }, (_, index) => {
+    const angle = ((60 * index) - 30) * Math.PI / 180;
+    return `${(x + size * Math.cos(angle)).toFixed(1)},${(y + size * Math.sin(angle)).toFixed(1)}`;
+  }).join(" ");
+  const grid = () => {
+    const cells = [];
+    for (let q = -12; q <= 12; q += 1) for (let r = -8; r <= 8; r += 1) {
+      const [x, y] = center(q, r); if (x > -30 && x < 810 && y > -30 && y < 540) cells.push(`<polygon points="${polygon(x, y)}"/>`);
+    }
+    return `<g class="hex-grid">${cells.join("")}</g>`;
+  };
+  const shipShape = (fleet) => ({
+    aurelian: `<path class="hull" d="M0 -31L9 -13L25 16L9 12L0 26L-9 12L-25 16L-9 -13Z"/><path class="spine" d="M0 -23L0 17M-8 3L8 3"/><circle class="engine" cy="20" r="4"/>`,
+    veyr: `<path class="hull" d="M0 -31L14 -11L33 4L11 10L6 25L0 19L-6 25L-11 10L-33 4L-14 -11Z"/><path class="spine" d="M0 -23L0 16M-21 4L21 4"/><circle class="engine" cy="17" r="4"/>`,
+    kestrel: `<path class="hull" d="M0 -28L13 -15L27 -8L16 3L13 24L5 19L0 28L-5 19L-13 24L-16 3L-27 -8L-13 -15Z"/><path class="spine" d="M0 -21L0 19M-17 -5L17 -5M-11 7L11 7"/><circle class="engine" cy="22" r="4"/>`
+  })[fleet];
   const hex = (ship) => {
-    const [q, r, facing] = ship.position; const x = 390 + (q * 47) + (r * 24); const y = 255 + r * 42;
-    return `<g class="token fleet-${ship.fleet} ${ship.destroyed ? "destroyed" : ""}" transform="translate(${x} ${y}) rotate(${facing * 60})"><path d="M0 -21 L18 -7 L12 16 L-12 16 L-18 -7 Z"/><circle cx="0" cy="0" r="6"/><text y="4">${ship.size[0].toUpperCase()}</text></g>`;
+    const [q, r, facing] = ship.position; const [x, y] = center(q, r);
+    return `<g class="ship-token fleet-${ship.fleet} ${ship.destroyed ? "destroyed" : ""}" transform="translate(${x} ${y}) rotate(${(facing * 60) + 90})">${shipShape(ship.fleet)}</g>`;
   };
   const controls = (ship, target) => {
     if (state.winner) return `<a class="button" href="/">Return to fleet selection</a>`;
@@ -48,7 +65,7 @@ export function mountMatch(root) {
     root.innerHTML = `
       <header class="game-header"><a href="/" class="wordmark">THE <strong>SHATTERED</strong> REACH</a><div class="turn-state"><span>TURN ${state.turn}</span><b>${state.winner ? `${state.winner === "player_one" ? "Player One" : "Player Two"} wins` : state.phase === "allocation" ? "Secret allocation" : `Impulse ${state.impulse} · ${state.initiative === player ? "You hold initiative" : "Opponent holds initiative"}`}</b></div><button class="switch-player">Viewing: ${player === "player_one" ? "Player One" : "Player Two"}</button></header>
       <main class="match-layout"><section class="command-panel"><p class="eyebrow">${state.scenario === "tutorial" ? `Tutorial · ${["Set the battle plan", "Reveal allocations", "Watch an impulse", "Fire your first weapon"][state.tutorial_step] || "Continue the engagement"}` : "Fleet command"}</p><h1>${state.phase === "allocation" ? "Commit your energy" : "Command the engagement"}</h1><p class="quiet">${state.log.at(-1)}</p>${current ? controls(current, target) : ""}</section>
-      <section class="battlefield"><div class="nebula"></div><svg viewBox="0 0 780 510" aria-label="Tactical hex battlefield"><defs><pattern id="hexes" width="72" height="84" patternUnits="userSpaceOnUse"><path d="M24 0L72 0L96 42L72 84L24 84L0 42Z" fill="none" stroke="rgba(180,207,255,.16)"/></pattern></defs><rect width="780" height="510" fill="url(#hexes)"/>${state.ships.map(hex).join("")}</svg><div class="battlefield-label">Tactical display · axial hex grid</div></section>
+      <section class="battlefield"><div class="nebula"></div><svg viewBox="0 0 780 510" aria-label="Tactical hex battlefield">${grid()}${state.ships.map(hex).join("")}</svg><div class="battlefield-label">Tactical display · axial hex grid</div></section>
       <aside class="fleet-status"><h2>Fleet status</h2>${state.ships.map(shipCard).join("")}</aside></main>`;
     bind(current, target);
   };
