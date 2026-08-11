@@ -72,11 +72,14 @@ const trackBoxes = (count, active, kind, startAt = 1) => Array.from({ length: co
   return `<span class="track-box ${online ? "online" : "spent"} ${kind}">${index + startAt}</span>`;
 }).join("");
 
-const systemTrack = (label, count, active, kind, note = "") => `
-  <section class="system-track ${kind}">
+const systemTrack = (label, count, active, kind, note = "", alignedColumns = null) => {
+  const boxWidth = alignedColumns ? ` style="--shield-box-width:calc(${(100 / alignedColumns).toFixed(4)}% - ${(((alignedColumns - 1) * 3) / alignedColumns).toFixed(2)}px)"` : "";
+  return `
+  <section class="system-track ${kind}"${boxWidth}>
     <header><h3>${label}</h3><span>${active}/${count}${note ? ` · ${note}` : ""}</span></header>
     <div class="track-boxes">${trackBoxes(count, active, kind)}</div>
   </section>`;
+};
 
 const movementTrack = (speed, hidden) => `
   <section class="system-track movement-track">
@@ -114,6 +117,9 @@ const weaponChart = (type) => {
 export function shipSchematic(ship, state, player) {
   const privateAllocation = state.phase === "allocation" && ship.player !== player;
   const availableEnergy = Math.max(ship.energy - ship.damage.engines, 0);
+  const maxFrontShields = ship.max_front_shields || ship.shields.front;
+  const maxAftShields = ship.max_aft_shields || ship.shields.aft;
+  const shieldColumns = Math.max(maxFrontShields, maxAftShields);
   const weaponTypes = [...new Set(ship.weapons.map((weapon) => weapon.type))];
   const owner = ship.player === "player_one" ? "Player One" : "Player Two";
   const maneuver = ship.size === "large" ? "Capital ships have no special maneuver" : ship.special_available ? "Special maneuver ready" : "Special maneuver expended";
@@ -134,10 +140,10 @@ export function shipSchematic(ship, state, player) {
           <section class="maneuver-status ${ship.special_available ? "ready" : "spent"}"><span></span><div><h3>Special maneuver</h3><p>${maneuver}</p></div></section>
         </div>
         <div class="schematic-vessel">
-          ${systemTrack("Forward shield", ship.max_front_shields || ship.shields.front, ship.shields.front, "shield", "forward hemisphere")}
+          ${systemTrack("Forward shield", maxFrontShields, ship.shields.front, "shield", "forward hemisphere", shieldColumns)}
           <div class="schematic-hull"><div class="bearing bearing-front">FORWARD</div>${shipGlyph(ship, "ship-glyph-schematic")}<div class="scan-ring ring-one"></div><div class="scan-ring ring-two"></div></div>
+          ${systemTrack("Aft shield", maxAftShields, ship.shields.aft, "shield", "aft hemisphere", shieldColumns)}
           <div class="weapon-rack">${ship.weapons.map((weapon) => weaponModule(weapon, ship, privateAllocation)).join("")}</div>
-          ${systemTrack("Aft shield", ship.max_aft_shields || ship.shields.aft, ship.shields.aft, "shield", "aft hemisphere")}
         </div>
         <div class="schematic-reference">
           <section class="ship-readout"><h3>Live readout</h3><dl><div><dt>Facing</dt><dd>${ship.position[2]}</dd></div><div><dt>Hex</dt><dd>${ship.position[1] + Math.floor(ship.position[0] / 2) + 1}${String(ship.position[0] + 1).padStart(2, "0")}</dd></div><div><dt>Impulse</dt><dd>${state.impulse}</dd></div><div><dt>Energy</dt><dd>${availableEnergy}</dd></div></dl></section>
