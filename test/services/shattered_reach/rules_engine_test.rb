@@ -27,6 +27,21 @@ class ShatteredReach::RulesEngineTest < ActiveSupport::TestCase
     assert_equal 7, state["ships"].last["position"][1] + (state["ships"].last["position"][0] / 2)
   end
 
+  test "ship state exposes maximum shield tracks for the live schematic" do
+    state = ShatteredReach::RulesEngine.start
+    ship = state["ships"].first
+
+    assert_equal 6, ship["max_front_shields"]
+    assert_equal 5, ship["max_aft_shields"]
+
+    ship.delete("max_front_shields")
+    ship.delete("max_aft_shields")
+    ShatteredReach::RulesEngine.normalize!(state)
+
+    assert_equal 6, ship["max_front_shields"]
+    assert_equal 5, ship["max_aft_shields"]
+  end
+
   test "allocations are limited by engine energy" do
     state = ShatteredReach::RulesEngine.start
     ship = state["ships"].first

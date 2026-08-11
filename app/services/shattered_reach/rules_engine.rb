@@ -50,11 +50,19 @@ module ShatteredReach
     end
 
     def self.normalize!(state)
-      return state if state.key?("board_size")
+      unless state.key?("board_size")
+        state["board_size"] = 15
+        if state["turn"] == 1 && state["phase"] == "allocation" && state["impulse"].to_i.zero?
+          starting_positions(15).each_with_index { |position, index| state["ships"][index]["position"] = position if state["ships"][index] }
+        end
+      end
 
-      state["board_size"] = 15
-      if state["turn"] == 1 && state["phase"] == "allocation" && state["impulse"].to_i.zero?
-        starting_positions(15).each_with_index { |position, index| state["ships"][index]["position"] = position if state["ships"][index] }
+      state["ships"].each do |ship|
+        spec = GameDefinition::SHIPS[ship["key"]]
+        next unless spec
+
+        ship["max_front_shields"] ||= spec[:front_shields]
+        ship["max_aft_shields"] ||= spec[:aft_shields]
       end
       state
     end
@@ -64,7 +72,8 @@ module ShatteredReach
       {
         "id" => "#{player}-#{key}", "key" => key, "player" => player, "name" => spec[:name], "fleet" => spec[:fleet],
         "size" => spec[:size], "position" => position, "energy" => spec[:energy], "hull" => spec[:hull], "max_hull" => spec[:hull],
-        "shields" => { "front" => spec[:front_shields], "aft" => spec[:aft_shields] }, "allocation" => { "speed" => 0, "shields" => 0, "weapons" => [] },
+        "shields" => { "front" => spec[:front_shields], "aft" => spec[:aft_shields] }, "max_front_shields" => spec[:front_shields], "max_aft_shields" => spec[:aft_shields],
+        "allocation" => { "speed" => 0, "shields" => 0, "weapons" => [] },
         "locked" => false, "special_available" => spec[:size] != "large", "weapons" => spec[:weapons].map.with_index { |w, i| w.stringify_keys.merge("id" => "w#{i}", "destroyed" => false, "fired" => false) },
         "damage" => { "engines" => 0, "weapons" => 0 }, "destroyed" => false
       }
