@@ -27,9 +27,9 @@ const HARDPOINTS = {
   aurelian_frigate: [[-20, 11], [0, -22]],
   aurelian_cruiser: [[-22, 11], [0, 23], [0, -22]],
   aurelian_battleship: [[-24, 12], [0, 25], [24, 12]],
-  veyr_frigate: [[20, -11], [0, 12]],
-  veyr_cruiser: [[22, -12], [-18, 14], [0, 10]],
-  veyr_battleship: [[-24, -12], [24, -12], [0, 12]],
+  veyr_frigate: [[17, -9], [0, 12]],
+  veyr_cruiser: [[24, -8], [-15, 14], [0, 10]],
+  veyr_battleship: [[-28, -11], [28, -11], [0, 12]],
   kestrel_frigate: [[0, -22], [0, 8]],
   kestrel_cruiser: [[-18, 17], [0, -22], [18, 17]],
   kestrel_battleship: [[-27, 19], [0, -23], [27, 19], [0, 11]]
@@ -94,9 +94,9 @@ const weaponHardpoints = (ship, hidden) => {
     const state = weaponState(weapon, ship, hidden);
     const profile = WEAPONS[weapon.type];
     const pipCount = weapon.type === "missile" ? Math.min(weapon.ammo || 0, 4) : profile.energy;
-    const pips = Array.from({ length: pipCount }, (_, pip) => `<circle class="hardpoint-pip" cx="${x - ((pipCount - 1) * 1.6) + (pip * 3.2)}" cy="${y + 5}" r=".8"/>`).join("");
+    const pips = Array.from({ length: pipCount }, (_, pip) => `<circle class="hardpoint-pip" cx="${x - ((pipCount - 1) * .8) + (pip * 1.6)}" cy="${y + 2.55}" r=".4"/>`).join("");
     return `<g class="weapon-hardpoint ${state} ${weapon.id === selectedId ? "selected" : ""}" data-weapon-id="${weapon.id}" data-arcs="${weapon.arc.join(" ")}" data-weapon-label="${profile.label}" tabindex="0" role="button" aria-label="${profile.label}, ${state}">
-      <title>${profile.label} · ${weapon.arc.join("/")} · ${state}</title><rect x="${x - 7}" y="${y - 7}" width="14" height="14" rx="1"/><text x="${x}" y="${y + 1.5}">${weaponAbbreviation(weapon)}</text>${pips}<path class="hardpoint-damage" d="M${x - 5} ${y - 5}L${x + 5} ${y + 5}M${x + 5} ${y - 5}L${x - 5} ${y + 5}"/>
+      <title>${profile.label} · ${weapon.arc.join("/")} · ${state}</title><rect class="hardpoint-bay" x="${x - 5.25}" y="${y - 5.25}" width="10.5" height="10.5" rx="1.35"/><rect class="hardpoint-control" x="${x - 3.6}" y="${y - 3.6}" width="7.2" height="7.2" rx=".55"/><text x="${x}" y="${y + .8}">${weaponAbbreviation(weapon)}</text>${pips}<path class="hardpoint-damage" d="M${x - 2.6} ${y - 2.6}L${x + 2.6} ${y + 2.6}M${x + 2.6} ${y - 2.6}L${x - 2.6} ${y + 2.6}"/>
     </g>`;
   }).join("");
 };
