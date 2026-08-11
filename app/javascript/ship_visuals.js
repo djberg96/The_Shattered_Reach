@@ -203,7 +203,9 @@ export function shipSchematic(ship, state, player) {
   const weaponTypes = [...new Set(ship.weapons.map((weapon) => weapon.type))];
   const owner = ship.player === "player_one" ? "Player One" : "Player Two";
   const maneuver = ship.size === "large" ? "Capital ships have no special maneuver" : ship.special_available ? "Special maneuver ready" : "Special maneuver expended";
-  const hexReference = `${ship.position[1] + Math.floor(ship.position[0] / 2) + 1}${String(ship.position[0] + 1).padStart(2, "0")}`;
+  const hexColumn = ship.position[0] + 1;
+  const hexRow = ship.position[1] + Math.floor(ship.position[0] / 2) + 1;
+  const hexReference = `${String(hexColumn).padStart(2, "0")}${String(hexRow).padStart(2, "0")}`;
 
   return `<div class="schematic-backdrop" role="presentation">
     <section class="ship-schematic fleet-${ship.fleet}" role="dialog" aria-modal="true" aria-labelledby="schematic-title">

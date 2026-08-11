@@ -45,7 +45,7 @@ export function mountMatch(root) {
     const cells = [];
     for (let row = 0; row < boardSize; row += 1) for (let column = 0; column < boardSize; column += 1) {
       const q = column; const r = row - Math.floor(column / 2); const [x, y] = center(q, r);
-      const reference = `${row + 1}${String(column + 1).padStart(2, "0")}`;
+      const reference = `${String(column + 1).padStart(2, "0")}${String(row + 1).padStart(2, "0")}`;
       cells.push(`<g class="hex-cell"><polygon points="${polygon(x, y)}"/><text class="hex-reference" x="${x}" y="${y - (hexHeight / 2) + 12}">${reference}</text></g>`);
     }
     return `<g class="hex-grid">${cells.join("")}</g>`;
