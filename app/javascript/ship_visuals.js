@@ -21,6 +21,20 @@ const HULLS = {
   kestrel_battleship: "M0 -40L17 -24L11 -12L11 3L22 10L38 8L41 25L33 33L14 31L6 17L0 38L-6 17L-14 31L-33 33L-41 25L-38 8L-22 10L-11 3L-11 -12L-17 -24Z"
 };
 
+// Coordinates deliberately place each weapon on a visible part of its hull.
+// Array order matches the weapon order in GameDefinition.
+const HARDPOINTS = {
+  aurelian_frigate: [[-20, 11], [0, -22]],
+  aurelian_cruiser: [[-22, 11], [0, 23], [0, -22]],
+  aurelian_battleship: [[-24, 12], [0, 25], [24, 12]],
+  veyr_frigate: [[20, -11], [0, 12]],
+  veyr_cruiser: [[22, -12], [-18, 14], [0, 10]],
+  veyr_battleship: [[-24, -12], [24, -12], [0, 12]],
+  kestrel_frigate: [[0, -22], [0, 8]],
+  kestrel_cruiser: [[-18, 17], [0, -22], [18, 17]],
+  kestrel_battleship: [[-27, 19], [0, -23], [27, 19], [0, 11]]
+};
+
 const WEAPONS = {
   beam: {
     label: "Lance beam",
@@ -63,8 +77,34 @@ export function shipHull(ship) {
   return `<path class="hull" d="${path}"/><path class="spine" d="${detail}"/><circle class="engine" cy="28" r="3.5"/>`;
 }
 
-export function shipGlyph(ship, className = "") {
-  return `<svg class="ship-glyph ${className}" viewBox="-44 -44 88 88" aria-hidden="true"><g class="ship-token fleet-${ship.fleet}">${shipHull(ship)}</g></svg>`;
+const weaponState = (weapon, ship, hidden) => {
+  if (weapon.destroyed) return "destroyed";
+  if (weapon.fired) return "fired";
+  if (hidden) return "hidden";
+  return weapon.type === "missile" || ship.allocation.weapons.includes(weapon.id) ? "charged" : "standby";
+};
+
+const weaponAbbreviation = (weapon) => ({ beam: "LB", driver: "MD", missile: "SM" })[weapon.type];
+
+const weaponHardpoints = (ship, hidden) => {
+  const mounts = HARDPOINTS[ship.key] || [];
+  const selectedId = (ship.weapons.find((weapon) => !weapon.destroyed) || ship.weapons[0])?.id;
+  return ship.weapons.map((weapon, index) => {
+    const [x, y] = mounts[index] || [0, (index * 14) - 14];
+    const state = weaponState(weapon, ship, hidden);
+    const profile = WEAPONS[weapon.type];
+    const pipCount = weapon.type === "missile" ? Math.min(weapon.ammo || 0, 4) : profile.energy;
+    const pips = Array.from({ length: pipCount }, (_, pip) => `<circle class="hardpoint-pip" cx="${x - ((pipCount - 1) * 1.6) + (pip * 3.2)}" cy="${y + 5}" r=".8"/>`).join("");
+    return `<g class="weapon-hardpoint ${state} ${weapon.id === selectedId ? "selected" : ""}" data-weapon-id="${weapon.id}" data-arcs="${weapon.arc.join(" ")}" data-weapon-label="${profile.label}" tabindex="0" role="button" aria-label="${profile.label}, ${state}">
+      <title>${profile.label} · ${weapon.arc.join("/")} · ${state}</title><rect x="${x - 7}" y="${y - 7}" width="14" height="14" rx="1"/><text x="${x}" y="${y + 1.5}">${weaponAbbreviation(weapon)}</text>${pips}<path class="hardpoint-damage" d="M${x - 5} ${y - 5}L${x + 5} ${y + 5}M${x + 5} ${y - 5}L${x - 5} ${y + 5}"/>
+    </g>`;
+  }).join("");
+};
+
+export function shipGlyph(ship, className = "", options = {}) {
+  const hardpoints = options.hardpoints ? weaponHardpoints(ship, options.hidden) : "";
+  const accessibility = options.hardpoints ? `role="group" aria-label="${ship.name} weapon hardpoints"` : "aria-hidden=\"true\"";
+  return `<svg class="ship-glyph ${className}" viewBox="-44 -44 88 88" ${accessibility}><g class="ship-token fleet-${ship.fleet}">${shipHull(ship)}</g>${hardpoints}</svg>`;
 }
 
 const hexPoints = (x, y, size = 45) => Array.from({ length: 6 }, (_, index) => {
@@ -88,7 +128,7 @@ const arcHexCluster = (ship) => {
     return `<g class="arc-hex ${active ? "active" : ""}" data-arcs="${cell.arcs.join(" ")}"><polygon points="${hexPoints(cell.x, cell.y)}"/><text x="${cell.x}" y="${cell.y + 3}">${cell.label}</text></g>`;
   }).join("");
 
-  return `<div class="arc-vignette"><div class="arc-readout"><span>Firing solution</span><b>${weapon ? `${WEAPONS[weapon.type].label} · ${selectedArcs.join("/")}` : "No weapons online"}</b></div><svg class="arc-hex-cluster" viewBox="-125 -130 250 260" aria-label="Firing arc diagram"><g class="arc-hex center"><polygon points="${hexPoints(0, 0)}"/></g>${outerHexes}</svg></div>`;
+  return `<div class="arc-vignette" aria-hidden="true"><div class="arc-readout"><span>Firing solution</span><b>${weapon ? `${WEAPONS[weapon.type].label} · ${selectedArcs.join("/")}` : "No weapons online"}</b></div><svg class="arc-hex-cluster" viewBox="-125 -130 250 260" aria-label="Firing arc diagram"><g class="arc-hex center"><polygon points="${hexPoints(0, 0)}"/></g>${outerHexes}</svg></div>`;
 };
 
 const trackBoxes = (count, active, kind, startAt = 1) => Array.from({ length: count }, (_, index) => {
@@ -96,12 +136,29 @@ const trackBoxes = (count, active, kind, startAt = 1) => Array.from({ length: co
   return `<span class="track-box ${online ? "online" : "spent"} ${kind}">${index + startAt}</span>`;
 }).join("");
 
-const systemTrack = (label, count, active, kind, note = "", alignedColumns = null) => {
-  const boxWidth = alignedColumns ? ` style="--shield-box-width:calc(${(100 / alignedColumns).toFixed(4)}% - ${(((alignedColumns - 1) * 3) / alignedColumns).toFixed(2)}px)"` : "";
+const systemTrack = (label, count, active, kind, note = "") => {
   return `
-  <section class="system-track ${kind}"${boxWidth}>
+  <section class="system-track ${kind}">
     <header><h3>${label}</h3><span>${active}/${count}${note ? ` · ${note}` : ""}</span></header>
     <div class="track-boxes">${trackBoxes(count, active, kind)}</div>
+  </section>`;
+};
+
+const shieldBank = (label, count, active, columns) => {
+  const boxWidth = `calc(${(100 / columns).toFixed(4)}% - ${(((columns - 1) * 2) / columns).toFixed(2)}px)`;
+  return `<div class="compact-shield-bank">
+    <div><span>${label}</span><b>${active}/${count}</b></div>
+    <div class="compact-shield-boxes" style="--shield-box-width:${boxWidth}">${trackBoxes(count, active, "shield")}</div>
+  </div>`;
+};
+
+const shieldPanel = (ship, maxFront, maxAft) => {
+  const columns = Math.max(maxFront, maxAft);
+  return `<section class="shield-console">
+    <header><h3>Shield array</h3><span>hemisphere strength</span></header>
+    ${shieldBank("Forward", maxFront, ship.shields.front, columns)}
+    <div class="shield-axis"><span>F</span><i></i><span>A</span></div>
+    ${shieldBank("Aft", maxAft, ship.shields.aft, columns)}
   </section>`;
 };
 
@@ -118,10 +175,10 @@ const turnModes = (size) => {
 
 const weaponModule = (weapon, ship, hidden) => {
   const profile = WEAPONS[weapon.type];
-  const charged = !hidden && (weapon.type === "missile" || ship.allocation.weapons.includes(weapon.id));
-  const state = weapon.destroyed ? "destroyed" : weapon.fired ? "fired" : charged ? "charged" : "standby";
+  const state = weaponState(weapon, ship, hidden);
+  const selectedId = (ship.weapons.find((entry) => !entry.destroyed) || ship.weapons[0])?.id;
   const resource = weapon.type === "missile" ? `${weapon.ammo ?? 0} missiles` : `${profile.energy} energy`;
-  return `<article class="weapon-module ${state}" data-arcs="${weapon.arc.join(" ")}" data-weapon-label="${profile.label}" tabindex="0">
+  return `<article class="weapon-module ${state} ${weapon.id === selectedId ? "selected" : ""}" data-weapon-id="${weapon.id}" data-arcs="${weapon.arc.join(" ")}" data-weapon-label="${profile.label}" tabindex="0">
     <div class="hardpoint"><span>${weapon.type === "beam" ? "LB" : weapon.type === "driver" ? "MD" : "SM"}</span></div>
     <div><h4>${profile.label}</h4><p>Arc ${weapon.arc.join(" · ")} <i>${resource}</i></p></div>
     <strong>${hidden ? "UNREVEALED" : state.toUpperCase()}</strong>
@@ -143,16 +200,16 @@ export function shipSchematic(ship, state, player) {
   const availableEnergy = Math.max(ship.energy - ship.damage.engines, 0);
   const maxFrontShields = ship.max_front_shields || ship.shields.front;
   const maxAftShields = ship.max_aft_shields || ship.shields.aft;
-  const shieldColumns = Math.max(maxFrontShields, maxAftShields);
   const weaponTypes = [...new Set(ship.weapons.map((weapon) => weapon.type))];
   const owner = ship.player === "player_one" ? "Player One" : "Player Two";
   const maneuver = ship.size === "large" ? "Capital ships have no special maneuver" : ship.special_available ? "Special maneuver ready" : "Special maneuver expended";
+  const hexReference = `${ship.position[1] + Math.floor(ship.position[0] / 2) + 1}${String(ship.position[0] + 1).padStart(2, "0")}`;
 
   return `<div class="schematic-backdrop" role="presentation">
     <section class="ship-schematic fleet-${ship.fleet}" role="dialog" aria-modal="true" aria-labelledby="schematic-title">
       <header class="schematic-header">
         <div><p class="eyebrow">${fleetName(ship.fleet)} · ${ship.size} hull · ${owner}</p><h2 id="schematic-title">${ship.name}</h2></div>
-        <div class="schematic-condition"><span>${ship.destroyed ? "DESTROYED" : "COMBAT READY"}</span><b>${Math.max(ship.hull, 0)} HULL</b></div>
+        <dl class="header-readout"><div><dt>Hex</dt><dd>${hexReference}</dd></div><div><dt>Facing</dt><dd>${ship.position[2]}</dd></div><div><dt>Turn</dt><dd>${state.turn}</dd></div><div><dt>Impulse</dt><dd>${state.impulse}</dd></div><div><dt>Energy</dt><dd>${availableEnergy}</dd></div></dl>
         <button class="schematic-close" aria-label="Close ship schematic">×</button>
       </header>
       <div class="schematic-grid">
@@ -160,17 +217,20 @@ export function shipSchematic(ship, state, player) {
           ${movementTrack(ship.allocation.speed, privateAllocation)}
           ${systemTrack("Reactor / engines", ship.energy, availableEnergy, "energy", `${ship.damage.engines} damaged`)}
           ${systemTrack("Hull integrity", ship.max_hull, Math.max(ship.hull, 0), "hull")}
+          ${shieldPanel(ship, maxFrontShields, maxAftShields)}
           ${turnModes(ship.size)}
           <section class="maneuver-status ${ship.special_available ? "ready" : "spent"}"><span></span><div><h3>Special maneuver</h3><p>${maneuver}</p></div></section>
         </div>
         <div class="schematic-vessel">
-          ${systemTrack("Forward shield", maxFrontShields, ship.shields.front, "shield", "forward hemisphere", shieldColumns)}
-          <div class="schematic-hull">${arcHexCluster(ship)}${shipGlyph(ship, "ship-glyph-schematic")}</div>
-          ${systemTrack("Aft shield", maxAftShields, ship.shields.aft, "shield", "aft hemisphere", shieldColumns)}
+          <div class="schematic-hull">
+            <div class="schematic-view-controls"><span>Engineering view</span><button class="toggle-arcs" type="button" aria-pressed="false">Show firing arcs</button></div>
+            ${arcHexCluster(ship)}
+            ${shipGlyph(ship, "ship-glyph-schematic", { hardpoints: true, hidden: privateAllocation })}
+          </div>
           <div class="weapon-rack">${ship.weapons.map((weapon) => weaponModule(weapon, ship, privateAllocation)).join("")}</div>
         </div>
         <div class="schematic-reference">
-          <section class="ship-readout"><h3>Live readout</h3><dl><div><dt>Facing</dt><dd>${ship.position[2]}</dd></div><div><dt>Hex</dt><dd>${ship.position[1] + Math.floor(ship.position[0] / 2) + 1}${String(ship.position[0] + 1).padStart(2, "0")}</dd></div><div><dt>Impulse</dt><dd>${state.impulse}</dd></div><div><dt>Energy</dt><dd>${availableEnergy}</dd></div></dl></section>
+          <p class="eyebrow reference-label">Weapon reference</p>
           ${weaponTypes.map(weaponChart).join("")}
         </div>
       </div>
