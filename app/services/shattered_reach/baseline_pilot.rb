@@ -19,7 +19,7 @@ module ShatteredReach
         selected << weapon["id"]
         budget -= cost
       end
-      { "ship_id" => ship["id"], "speed" => speed, "shields" => 0, "weapons" => weapons }
+      { "ship_id" => ship["id"], "speed" => speed, "front_shields" => 0, "aft_shields" => 0, "weapons" => weapons }
     end
   end
 end

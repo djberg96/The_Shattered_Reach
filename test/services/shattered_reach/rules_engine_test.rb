@@ -54,6 +54,39 @@ class ShatteredReach::RulesEngineTest < ActiveSupport::TestCase
     assert_match(/energy/, error.message)
   end
 
+  test "front and aft shield reinforcement are allocated independently" do
+    state = ShatteredReach::RulesEngine.start
+    ship = state["ships"].first
+
+    state = ShatteredReach::RulesEngine.apply(state, player: "player_one", action: "allocate", payload: { "ship_id" => ship["id"], "speed" => 1, "front_shields" => 2, "aft_shields" => 1 })
+
+    assert_equal({ "front" => 2, "aft" => 1 }, state["ships"].first.dig("allocation", "shields"))
+  end
+
+  test "a collapsed shield cannot be reinforced" do
+    state = ShatteredReach::RulesEngine.start
+    ship = state["ships"].first
+    ship["shields"]["aft"] = 0
+
+    error = assert_raises(ShatteredReach::RulesEngine::IllegalAction) do
+      ShatteredReach::RulesEngine.apply(state, player: "player_one", action: "allocate", payload: { "ship_id" => ship["id"], "aft_shields" => 1 })
+    end
+
+    assert_match(/collapsed/, error.message)
+  end
+
+  test "shield reinforcement absorbs damage before its shield track" do
+    state = ShatteredReach::RulesEngine.start
+    target = state["ships"].last
+    target["allocation"]["shields"] = { "front" => 2, "aft" => 0 }
+    before = target["shields"]["front"]
+
+    ShatteredReach::RulesEngine.send(:apply_damage!, state, target, 2, state["ships"].first)
+
+    assert_equal before, target["shields"]["front"]
+    assert_equal 0, target.dig("allocation", "shields", "front")
+  end
+
   test "both locked allocations begin the impulse phase" do
     state = ShatteredReach::RulesEngine.start
     state["ships"].each do |ship|

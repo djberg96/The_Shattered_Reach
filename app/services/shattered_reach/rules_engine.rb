@@ -64,6 +64,12 @@ module ShatteredReach
 
         ship["max_front_shields"] ||= spec[:front_shields]
         ship["max_aft_shields"] ||= spec[:aft_shields]
+        allocation = ship["allocation"] ||= { "speed" => 0, "shields" => {}, "weapons" => [] }
+        unless allocation["shields"].is_a?(Hash)
+          allocation["shields"] = { "front" => allocation["shields"].to_i, "aft" => 0 }
+        end
+        allocation["shields"]["front"] ||= 0
+        allocation["shields"]["aft"] ||= 0
       end
       state
     end
@@ -94,7 +100,7 @@ module ShatteredReach
         "id" => "#{player}-#{key}", "key" => key, "player" => player, "name" => spec[:name], "fleet" => spec[:fleet],
         "size" => spec[:size], "position" => position, "energy" => spec[:energy], "hull" => spec[:hull], "max_hull" => spec[:hull],
         "shields" => { "front" => spec[:front_shields], "aft" => spec[:aft_shields] }, "max_front_shields" => spec[:front_shields], "max_aft_shields" => spec[:aft_shields],
-        "allocation" => { "speed" => 0, "shields" => 0, "weapons" => [] },
+        "allocation" => { "speed" => 0, "shields" => { "front" => 0, "aft" => 0 }, "weapons" => [] },
         "locked" => false, "special_available" => spec[:size] != "large", "weapons" => spec[:weapons].map.with_index { |w, i| w.stringify_keys.merge("id" => "w#{i}", "destroyed" => false, "fired" => false) },
         "damage" => { "engines" => 0, "weapons" => 0 }, "destroyed" => false
       }
@@ -106,12 +112,16 @@ module ShatteredReach
       ship = owned_ship!(state, player, payload.fetch("ship_id"))
       raise IllegalAction, "Allocation is already locked" if ship["locked"]
       speed = payload.fetch("speed", 0).to_i.clamp(0, 12)
-      shields = payload.fetch("shields", 0).to_i.clamp(0, shield_cap(ship))
+      legacy_shields = payload.fetch("shields", 0)
+      front_shields = payload.fetch("front_shields", legacy_shields.is_a?(Hash) ? legacy_shields.fetch("front", 0) : legacy_shields).to_i.clamp(0, shield_cap(ship))
+      aft_shields = payload.fetch("aft_shields", legacy_shields.is_a?(Hash) ? legacy_shields.fetch("aft", 0) : 0).to_i.clamp(0, shield_cap(ship))
+      raise IllegalAction, "Forward shield is collapsed and cannot be reinforced" if front_shields.positive? && ship.dig("shields", "front").to_i.zero?
+      raise IllegalAction, "Aft shield is collapsed and cannot be reinforced" if aft_shields.positive? && ship.dig("shields", "aft").to_i.zero?
       weapons = Array(payload["weapons"]).map(&:to_s).uniq
       selected = ship["weapons"].select { |w| weapons.include?(w["id"]) && !w["destroyed"] }
-      cost = speed + shields + selected.sum { |w| GameDefinition::WEAPONS.fetch(w[:type] || w["type"])[:energy] }
+      cost = speed + front_shields + aft_shields + selected.sum { |w| GameDefinition::WEAPONS.fetch(w[:type] || w["type"])[:energy] }
       raise IllegalAction, "Allocation needs #{cost} energy; ship has #{available_energy(ship)}" if cost > available_energy(ship)
-      ship["allocation"] = { "speed" => speed, "shields" => shields, "weapons" => selected.map { |w| w["id"] } }
+      ship["allocation"] = { "speed" => speed, "shields" => { "front" => front_shields, "aft" => aft_shields }, "weapons" => selected.map { |w| w["id"] } }
       log!(state, "#{ship["name"]} has set its allocation.")
     end
     private_class_method :allocate!
@@ -189,6 +199,10 @@ module ShatteredReach
 
     def self.apply_damage!(state, target, amount, _attacker)
       shield = target["shields"]["front"] > 0 ? "front" : "aft"
+      reinforcement = target.dig("allocation", "shields", shield).to_i
+      reinforced = [reinforcement, amount].min
+      target["allocation"]["shields"][shield] -= reinforced
+      amount -= reinforced
       absorbed = [target["shields"][shield], amount].min
       target["shields"][shield] -= absorbed
       remaining = amount - absorbed
@@ -210,7 +224,7 @@ module ShatteredReach
       check_victory!(state)
       return if state["winner"]
       state["turn"] += 1; state["phase"] = "allocation"; state["impulse"] = 0
-      state["ships"].each { |ship| ship["locked"] = false; ship["allocation"] = { "speed" => 0, "shields" => 0, "weapons" => [] } unless ship["destroyed"] }
+      state["ships"].each { |ship| ship["locked"] = false; ship["allocation"] = { "speed" => 0, "shields" => { "front" => 0, "aft" => 0 }, "weapons" => [] } unless ship["destroyed"] }
       log!(state, "Turn #{state["turn"]}. Allocate energy in secret.")
     end
     private_class_method :finish_turn!
