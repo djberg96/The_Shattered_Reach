@@ -4,6 +4,7 @@ export function mountMatch(root) {
   let state = JSON.parse(root.dataset.matchState);
   const matchId = root.dataset.matchId;
   let player = "player_one";
+  let zoom = 1;
 
   const request = async (action, payload = {}) => {
     const response = await fetch(`/matches/${matchId}/action`, {
@@ -25,15 +26,20 @@ export function mountMatch(root) {
       <div><p class="eyebrow">${fleet(ship.fleet)} · ${ship.size}</p><h3>${ship.name}</h3>
       <dl><div><dt>Hull</dt><dd>${ship.hull}/${ship.max_hull}</dd></div><div><dt>Shields</dt><dd>F ${ship.shields.front} · A ${ship.shields.aft}</dd></div><div><dt>Energy</dt><dd>${ship.energy - ship.damage.engines}</dd></div></dl></div>
     </article>`;
-  const center = (q, r) => [390 + (48.5 * q) + (24.25 * r), 255 + (42 * r)];
-  const polygon = (x, y, size = 28) => Array.from({ length: 6 }, (_, index) => {
-    const angle = ((60 * index) - 30) * Math.PI / 180;
+  const hexSize = 42;
+  const camera = { q: 4, r: -2 };
+  const center = (q, r) => {
+    const cameraQ = q - camera.q; const cameraR = r - camera.r;
+    return [390 + (1.5 * hexSize * cameraQ), 255 + (Math.sqrt(3) * hexSize * (cameraR + (cameraQ / 2)))];
+  };
+  const polygon = (x, y, size = hexSize) => Array.from({ length: 6 }, (_, index) => {
+    const angle = (60 * index) * Math.PI / 180;
     return `${(x + size * Math.cos(angle)).toFixed(1)},${(y + size * Math.sin(angle)).toFixed(1)}`;
   }).join(" ");
   const grid = () => {
     const cells = [];
-    for (let q = -12; q <= 12; q += 1) for (let r = -8; r <= 8; r += 1) {
-      const [x, y] = center(q, r); if (x > -30 && x < 810 && y > -30 && y < 540) cells.push(`<polygon points="${polygon(x, y)}"/>`);
+    for (let q = -6; q <= 14; q += 1) for (let r = -10; r <= 6; r += 1) {
+      const [x, y] = center(q, r); if (x > -45 && x < 825 && y > -45 && y < 555) cells.push(`<polygon points="${polygon(x, y)}"/>`);
     }
     return `<g class="hex-grid">${cells.join("")}</g>`;
   };
@@ -44,7 +50,7 @@ export function mountMatch(root) {
   })[fleet];
   const hex = (ship) => {
     const [q, r, facing] = ship.position; const [x, y] = center(q, r);
-    return `<g class="ship-token fleet-${ship.fleet} ${ship.destroyed ? "destroyed" : ""}" transform="translate(${x} ${y}) rotate(${(facing * 60) + 90})">${shipShape(ship.fleet)}</g>`;
+    return `<g class="ship-token fleet-${ship.fleet} ${ship.destroyed ? "destroyed" : ""}" transform="translate(${x} ${y}) rotate(${120 - (facing * 60)})">${shipShape(ship.fleet)}</g>`;
   };
   const controls = (ship, target) => {
     if (state.winner) return `<a class="button" href="/">Return to fleet selection</a>`;
@@ -53,6 +59,9 @@ export function mountMatch(root) {
   };
   const bind = (ship, target) => {
     root.querySelector(".switch-player")?.addEventListener("click", () => { player = player === "player_one" ? "player_two" : "player_one"; render(); });
+    root.querySelector(".zoom-out")?.addEventListener("click", () => { zoom = Math.max(.75, zoom - .25); render(); });
+    root.querySelector(".zoom-reset")?.addEventListener("click", () => { zoom = 1; render(); });
+    root.querySelector(".zoom-in")?.addEventListener("click", () => { zoom = Math.min(1.75, zoom + .25); render(); });
     root.querySelectorAll("input").forEach((input) => input.addEventListener("input", () => root.querySelector(`#${input.id}-value`).textContent = input.value));
     root.querySelector(".save-allocation")?.addEventListener("click", () => request("allocate", { ship_id: ship.id, speed: root.querySelector("#speed").value, shields: root.querySelector("#shields").value, weapons: ship.weapons.filter((w) => w.type !== "missile" && !w.destroyed).map((w) => w.id) }));
     root.querySelector(".lock-allocation")?.addEventListener("click", () => request("lock_allocation"));
@@ -65,7 +74,7 @@ export function mountMatch(root) {
     root.innerHTML = `
       <header class="game-header"><a href="/" class="wordmark">THE <strong>SHATTERED</strong> REACH</a><div class="turn-state"><span>TURN ${state.turn}</span><b>${state.winner ? `${state.winner === "player_one" ? "Player One" : "Player Two"} wins` : state.phase === "allocation" ? "Secret allocation" : `Impulse ${state.impulse} · ${state.initiative === player ? "You hold initiative" : "Opponent holds initiative"}`}</b></div><button class="switch-player">Viewing: ${player === "player_one" ? "Player One" : "Player Two"}</button></header>
       <main class="match-layout"><section class="command-panel"><p class="eyebrow">${state.scenario === "tutorial" ? `Tutorial · ${["Set the battle plan", "Reveal allocations", "Watch an impulse", "Fire your first weapon"][state.tutorial_step] || "Continue the engagement"}` : "Fleet command"}</p><h1>${state.phase === "allocation" ? "Commit your energy" : "Command the engagement"}</h1><p class="quiet">${state.log.at(-1)}</p>${current ? controls(current, target) : ""}</section>
-      <section class="battlefield"><div class="nebula"></div><svg viewBox="0 0 780 510" aria-label="Tactical hex battlefield">${grid()}${state.ships.map(hex).join("")}</svg><div class="battlefield-label">Tactical display · axial hex grid</div></section>
+      <section class="battlefield"><div class="nebula"></div><div class="zoom-controls" aria-label="Battlefield zoom"><button class="zoom-out" aria-label="Zoom out">−</button><button class="zoom-reset" aria-label="Reset zoom">${Math.round(zoom * 100)}%</button><button class="zoom-in" aria-label="Zoom in">+</button></div><svg viewBox="0 0 780 510" aria-label="Tactical flat-top hex battlefield" style="width:${zoom * 100}%;max-width:none">${grid()}${state.ships.map(hex).join("")}</svg><div class="battlefield-label">Tactical display · flat-top axial hex grid</div></section>
       <aside class="fleet-status"><h2>Fleet status</h2>${state.ships.map(shipCard).join("")}</aside></main>`;
     bind(current, target);
   };
