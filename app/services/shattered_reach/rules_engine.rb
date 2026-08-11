@@ -24,7 +24,7 @@ module ShatteredReach
     end
 
     def self.starting_positions(board_size)
-      separation = [board_size - 3, 15].min
+      separation = (board_size - 3).clamp(10, 15)
       left_column = ((board_size - 1 - separation) / 2.0).floor
       right_column = left_column + separation
       row = board_size / 2
