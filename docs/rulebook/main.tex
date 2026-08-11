@@ -1,0 +1,59 @@
+\documentclass[11pt,letterpaper,oneside]{memoir}
+\usepackage[margin=0.8in]{geometry}
+\usepackage{fontspec,graphicx,xcolor,booktabs,enumitem,tikz,hyperref}
+\setmainfont{Helvetica}
+\definecolor{reachgold}{HTML}{B68039}
+\definecolor{reachvoid}{HTML}{111A37}
+\hypersetup{colorlinks=true,linkcolor=reachgold,urlcolor=reachgold}
+\setsecnumdepth{none}
+\newcommand{\game}{\textsc{The Shattered Reach}}
+\begin{document}
+\begin{titlingpage}
+\centering\vspace*{1.8in}
+{\color{reachgold}\Huge\bfseries THE\par}\vspace{.1in}
+{\color{reachvoid}\fontsize{42}{46}\selectfont\bfseries SHATTERED\par}\vspace{.1in}
+{\color{reachgold}\Huge\bfseries REACH\par}\vfill
+{\Large A tactical game of secret power, impulse movement, and fleet command\par}\vspace{.4in}
+{\small Prototype rulebook \textbullet\ Version 0.1\par}
+\end{titlingpage}
+\tableofcontents*
+\chapter{The battle at a glance}
+In \game{}, two commanders guide small space fleets across a hex map. At the start of every turn, secretly allocate energy to movement, weapon charging, and shield reinforcement. The next twelve impulses reveal which speeds move, creating a tactical rhythm that rewards prediction over perfect calculation.
+\section{What you need}
+For tabletop play: a hex map no larger than 20 by 20, one die, markers for energy and damage, and ship sheets. The computer prototype supplies all of these automatically.
+\section{Victory}
+Destroy enemy ships or score the most victory points from hull damage. A ship that leaves the map is destroyed.
+\chapter{Turn sequence}
+\begin{enumerate}[label=\arabic*.]
+\item \textbf{Allocate energy secretly.} Engines generate energy every turn. Spend it on speed, powered weapons, and shield reinforcement. Unspent energy is lost.
+\item \textbf{Announce speed and roll initiative.} The higher die chooses who resolves tied movement and firing first.
+\item \textbf{Resolve twelve impulses.} Draw four cards from each of the three phase decks. A ship whose speed appears on the card moves one hex or turns sixty degrees.
+\item \textbf{Fire weapons.} After movement, launch missiles, then resolve beams and mass drivers.
+\item \textbf{End the turn.} Return allocated energy to undamaged engines, repair shields if funded, and begin again.
+\end{enumerate}
+\section{Movement}
+A ship moves forward, turns only after satisfying its turn mode, or side-slips one hex without changing facing. Small, medium, and large ships have progressively stricter turn modes. Once per game, small and medium ships may use a special maneuver: Bootlegger (turn freely), Quick Stop, or Emergency Power (one extra move).
+\begin{center}\begin{tikzpicture}[scale=.7]
+\draw[gray!45] (0,0)--(1.73,0)--(2.6,1.5)--(1.73,3)--(0,3)--(-.87,1.5)--cycle;
+\draw[gray!45] (2.6,1.5)--(4.33,1.5)--(5.2,3)--(4.33,4.5)--(2.6,4.5)--(1.73,3)--cycle;
+\draw[->,very thick,reachgold] (0.3,1.5)--(2.15,1.5);\node at (1.25,2.15) {forward movement};
+\end{tikzpicture}\end{center}
+\chapter{Weapons, shields, and damage}
+\section{Weapons}
+\begin{center}\begin{tabular}{lllll}\toprule
+Weapon & Energy & Short & Medium & Long\\\midrule
+Lance beam & 2 & 1--3 hexes, 2+ / 3 damage & 4--6, 3+ / 2 & 7--9, 4+ / 1\\
+Mass driver & 1 & 1--4, 3+ / 2 & 5--8, 4+ / 2 & 9--12, 5+ / 2\\
+Seeker missile & 0 & \multicolumn{3}{l}{Unlimited range; 3 damage when it enters its target hex.}\\\bottomrule
+\end{tabular}\end{center}
+Beam and mass-driver weapons may only fire into their listed front, left, right, or aft arcs. Missiles use a full arc.
+\section{Shields and damage}
+Front and aft shields absorb hits from their respective halves of the ship. Reinforcement absorbs damage for that turn. Damage past shields is rolled one point at a time: 1--3 damages hull, 4--5 damages an engine, and 6 destroys a weapon. A ship with no hull remaining is destroyed.
+\chapter{Fleets and tutorial}
+\section{Fleet doctrine}
+\textbf{Aurelian Compact} ships reward careful beam positioning. \textbf{Veyr Dominion} fleets pressure opponents with mass drivers and missiles. \textbf{Kestrel Freeholds} combine durable hulls with flexible weapons. Each fleet fields a frigate, cruiser, and battleship; the Kestrel battleship completes the core roster.
+\section{First Light tutorial}
+1. Allocate speed and one powered weapon. 2. Lock allocations and reveal initiative. 3. Draw an impulse card and observe movement. 4. Select a target in range, fire, and watch shields absorb the hit. The browser prototype guides these steps directly.
+\section{Quick reference}
+Speed maximum is 12. Missiles move at speed 24. Ships may not enter an occupied hex; missiles may. Each powered weapon fires once per turn. At the end of twelve impulses, reset for the next turn.
+\end{document}

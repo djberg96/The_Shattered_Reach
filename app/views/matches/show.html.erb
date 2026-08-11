@@ -1,0 +1,2 @@
+<% content_for :title, "#{@match.title} — The Shattered Reach" %>
+<div data-match-id="<%= @match.id %>" data-match-state="<%= json_escape(@match.game_state.to_json) %>"></div>

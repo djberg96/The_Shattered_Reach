@@ -1,0 +1,11 @@
+/.bundle/
+/vendor/bundle
+/tmp/*
+/log/*
+/storage/*
+/db/*.sqlite3
+/public/assets/
+/docs/rulebook/build/
+!/tmp/.keep
+!/log/.keep
+!/storage/.keep
