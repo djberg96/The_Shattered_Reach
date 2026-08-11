@@ -54,18 +54,38 @@ export function mountMatch(root) {
     const [q, r, facing] = ship.position; const [x, y] = center(q, r);
     return `<g class="ship-token fleet-${ship.fleet} ${ship.destroyed ? "destroyed" : ""}" data-ship-id="${ship.id}" role="button" tabindex="0" aria-label="Open ${ship.name} schematic" transform="translate(${x} ${y}) rotate(${120 - (facing * 60)}) scale(.86)">${shipHull(ship)}</g>`;
   };
+  const weaponName = (weapon) => weapon.type === "beam" ? "Lance beam" : weapon.type === "driver" ? "Mass driver" : "Seeker missile";
+  const weaponEnergy = (weapon) => weapon.type === "beam" ? 2 : weapon.type === "driver" ? 1 : 0;
+  const weaponChoices = (ship) => ship.weapons.filter((weapon) => weapon.type !== "missile" && !weapon.destroyed).map((weapon) => `
+    <label class="weapon-allocation">
+      <input type="checkbox" value="${weapon.id}" data-energy="${weaponEnergy(weapon)}" ${ship.allocation.weapons.includes(weapon.id) ? "checked" : ""}>
+      <span><b>${weapon.mount || weaponName(weapon)}</b>${weaponName(weapon)} · Arc ${weapon.arc.join("/")}</span>
+      <em>${weaponEnergy(weapon)}E</em>
+    </label>`).join("");
   const controls = (ship, target) => {
     if (state.winner) return `<a class="button" href="/">Return to fleet selection</a>`;
-    if (state.phase === "allocation") return `<div class="control-stack"><label>Speed <output id="speed-value">${ship.allocation.speed}</output><input id="speed" type="range" min="0" max="12" value="${ship.allocation.speed}"></label><label>Shield reinforcement <output id="shields-value">${ship.allocation.shields}</output><input id="shields" type="range" min="0" max="${ship.size === "small" ? 1 : ship.size === "medium" ? 2 : 3}" value="${ship.allocation.shields}"></label><button class="primary save-allocation">Set allocation</button><button class="secondary lock-allocation">Lock allocation</button></div>`;
-    return `<div class="control-stack"><button class="primary advance">Draw next impulse</button>${target ? ship.weapons.filter((w) => !w.destroyed).map((w) => `<button class="secondary fire" data-weapon="${w.id}">Fire ${w.type === "beam" ? "Lance beam" : w.type === "driver" ? "Mass driver" : "Seeker missile"} at ${target.name}</button>`).join("") : ""}${ship.special_available ? `<button class="secondary special">Emergency power maneuver</button>` : ""}</div>`;
+    if (state.phase === "allocation") return `<div class="control-stack"><label>Speed <output id="speed-value">${ship.allocation.speed}</output><input id="speed" type="range" min="0" max="12" value="${ship.allocation.speed}"></label><label>Shield reinforcement <output id="shields-value">${ship.allocation.shields}</output><input id="shields" type="range" min="0" max="${ship.size === "small" ? 1 : ship.size === "medium" ? 2 : 3}" value="${ship.allocation.shields}"></label><fieldset class="weapon-allocation-list"><legend>Weapon circuits</legend>${weaponChoices(ship)}</fieldset><div class="allocation-budget"><span>Energy committed</span><b><output id="energy-used">0</output> / ${ship.energy - ship.damage.engines}</b></div><button class="primary save-allocation">Set allocation</button><button class="secondary lock-allocation">Lock allocation</button></div>`;
+    return `<div class="control-stack"><button class="primary advance">Draw next impulse</button>${target ? ship.weapons.filter((w) => !w.destroyed).map((w) => `<button class="secondary fire" data-weapon="${w.id}">Fire ${w.mount ? `${w.mount} ` : ""}${weaponName(w)} at ${target.name}</button>`).join("") : ""}${ship.special_available ? `<button class="secondary special">Emergency power maneuver</button>` : ""}</div>`;
   };
   const bind = (ship, target) => {
     root.querySelector(".switch-player")?.addEventListener("click", () => { player = player === "player_one" ? "player_two" : "player_one"; render(); });
     root.querySelector(".zoom-out")?.addEventListener("click", () => { zoom = Math.max(.75, zoom - .25); render(); });
     root.querySelector(".zoom-reset")?.addEventListener("click", () => { zoom = 1; render(); });
     root.querySelector(".zoom-in")?.addEventListener("click", () => { zoom = Math.min(1.75, zoom + .25); render(); });
-    root.querySelectorAll("input").forEach((input) => input.addEventListener("input", () => root.querySelector(`#${input.id}-value`).textContent = input.value));
-    root.querySelector(".save-allocation")?.addEventListener("click", () => request("allocate", { ship_id: ship.id, speed: root.querySelector("#speed").value, shields: root.querySelector("#shields").value, weapons: ship.weapons.filter((w) => w.type !== "missile" && !w.destroyed).map((w) => w.id) }));
+    const updateEnergyBudget = () => {
+      const speed = Number(root.querySelector("#speed")?.value || 0);
+      const shields = Number(root.querySelector("#shields")?.value || 0);
+      const weapons = [...root.querySelectorAll(".weapon-allocation input:checked")].reduce((sum, input) => sum + Number(input.dataset.energy), 0);
+      const used = speed + shields + weapons;
+      const budget = root.querySelector(".allocation-budget");
+      if (budget) budget.classList.toggle("over", used > ship.energy - ship.damage.engines);
+      const output = root.querySelector("#energy-used");
+      if (output) output.textContent = used;
+    };
+    root.querySelectorAll('input[type="range"]').forEach((input) => input.addEventListener("input", () => { root.querySelector(`#${input.id}-value`).textContent = input.value; updateEnergyBudget(); }));
+    root.querySelectorAll(".weapon-allocation input").forEach((input) => input.addEventListener("change", updateEnergyBudget));
+    updateEnergyBudget();
+    root.querySelector(".save-allocation")?.addEventListener("click", () => request("allocate", { ship_id: ship.id, speed: root.querySelector("#speed").value, shields: root.querySelector("#shields").value, weapons: [...root.querySelectorAll(".weapon-allocation input:checked")].map((input) => input.value) }));
     root.querySelector(".lock-allocation")?.addEventListener("click", () => request("lock_allocation"));
     root.querySelector(".advance")?.addEventListener("click", () => request("advance_impulse"));
     root.querySelectorAll(".fire").forEach((button) => button.addEventListener("click", () => request("fire", { ship_id: ship.id, target_id: target.id, weapon_id: button.dataset.weapon })));

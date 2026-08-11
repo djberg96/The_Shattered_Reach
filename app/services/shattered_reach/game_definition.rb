@@ -3,7 +3,7 @@
 module ShatteredReach
   # Data kept deliberately plain so it can later be exported for a client or API.
   module GameDefinition
-    VERSION = "0.1.0"
+    VERSION = "0.2.0"
 
     def self.ship(name, fleet, size, energy, hull, front, aft, weapons)
       { name: name, fleet: fleet, size: size.to_s, energy: energy, hull: hull, front_shields: front, aft_shields: aft, weapons: weapons }
@@ -23,15 +23,53 @@ module ShatteredReach
     }.freeze
 
     SHIPS = {
-      "aurelian_frigate" => ship("Aurelian Frigate", "aurelian", :small, 8, 5, 4, 4, [{ type: "beam", arc: %w[F L R] }, { type: "driver", arc: %w[F] }]),
-      "aurelian_cruiser" => ship("Aurelian Cruiser", "aurelian", :medium, 11, 7, 6, 5, [{ type: "beam", arc: %w[F L R] }, { type: "beam", arc: %w[A] }, { type: "driver", arc: %w[F] }]),
-      "aurelian_battleship" => ship("Aurelian Battleship", "aurelian", :large, 15, 9, 9, 7, [{ type: "beam", arc: %w[F L R] }, { type: "beam", arc: %w[A] }, { type: "driver", arc: %w[F L R] }]),
-      "veyr_frigate" => ship("Veyr Frigate", "veyr", :small, 7, 5, 3, 3, [{ type: "driver", arc: %w[F L R] }, { type: "missile", arc: %w[F L R A], ammo: 3 }]),
-      "veyr_cruiser" => ship("Veyr Cruiser", "veyr", :medium, 10, 7, 5, 5, [{ type: "driver", arc: %w[F L R] }, { type: "driver", arc: %w[A] }, { type: "missile", arc: %w[F L R A], ammo: 3 }]),
-      "veyr_battleship" => ship("Veyr Battleship", "veyr", :large, 14, 8, 8, 7, [{ type: "driver", arc: %w[F L R] }, { type: "driver", arc: %w[F L R] }, { type: "missile", arc: %w[F L R A], ammo: 4 }]),
-      "kestrel_frigate" => ship("Kestrel Frigate", "kestrel", :small, 9, 4, 4, 5, [{ type: "beam", arc: %w[F] }, { type: "missile", arc: %w[F L R A], ammo: 3 }]),
-      "kestrel_cruiser" => ship("Kestrel Cruiser", "kestrel", :medium, 12, 6, 6, 6, [{ type: "beam", arc: %w[F L R] }, { type: "driver", arc: %w[F] }, { type: "missile", arc: %w[F L R A], ammo: 3 }]),
-      "kestrel_battleship" => ship("Kestrel Battleship", "kestrel", :large, 16, 8, 9, 8, [{ type: "beam", arc: %w[F L R] }, { type: "driver", arc: %w[F L R] }, { type: "driver", arc: %w[A] }, { type: "missile", arc: %w[F L R A], ammo: 4 }])
+      # Each entry corresponds to one damage box on the legacy ship sheet.
+      "aurelian_frigate" => ship("Aurelian Frigate", "aurelian", :small, 8, 5, 4, 4, [
+        { type: "beam", mount: "B1", arc: %w[L] }, { type: "beam", mount: "B1", arc: %w[L] },
+        { type: "beam", mount: "B2", arc: %w[R] }, { type: "beam", mount: "B2", arc: %w[R] },
+        { type: "driver", mount: "MD", arc: %w[F] }
+      ]),
+      "aurelian_cruiser" => ship("Aurelian Cruiser", "aurelian", :medium, 11, 7, 6, 5, [
+        { type: "beam", mount: "B1", arc: %w[L] }, { type: "beam", mount: "B1", arc: %w[L] },
+        { type: "beam", mount: "B2", arc: %w[R] }, { type: "beam", mount: "B2", arc: %w[R] },
+        { type: "driver", mount: "MD", arc: %w[F] }, { type: "driver", mount: "MD", arc: %w[F R A L] }
+      ]),
+      "aurelian_battleship" => ship("Aurelian Battleship", "aurelian", :large, 15, 9, 9, 7, [
+        { type: "beam", mount: "B1", arc: %w[L] }, { type: "beam", mount: "B1", arc: %w[L] },
+        { type: "beam", mount: "B1", arc: %w[R] }, { type: "beam", mount: "B1", arc: %w[R] },
+        { type: "beam", mount: "B2", arc: %w[L A] }, { type: "beam", mount: "B2", arc: %w[L A] },
+        { type: "beam", mount: "B2", arc: %w[R A] }, { type: "beam", mount: "B2", arc: %w[R A] },
+        { type: "driver", mount: "MD", arc: %w[F] }, { type: "driver", mount: "MD", arc: %w[F R A L] }
+      ]),
+      "veyr_frigate" => ship("Veyr Frigate", "veyr", :small, 7, 5, 3, 3, [
+        { type: "beam", mount: "B1", arc: %w[L R A] }, { type: "beam", mount: "B1", arc: %w[L R A] },
+        { type: "driver", mount: "MD", arc: %w[F] }, { type: "missile", mount: "M", arc: %w[F R A L], ammo: 3 }
+      ]),
+      "veyr_cruiser" => ship("Veyr Cruiser", "veyr", :medium, 10, 7, 5, 5, [
+        { type: "beam", mount: "B1", arc: %w[L A] }, { type: "beam", mount: "B1", arc: %w[L A] },
+        { type: "beam", mount: "B2", arc: %w[R A] }, { type: "beam", mount: "B2", arc: %w[R A] },
+        { type: "driver", mount: "MD", arc: %w[F] }, { type: "missile", mount: "M", arc: %w[F R A L], ammo: 3 }
+      ]),
+      "veyr_battleship" => ship("Veyr Battleship", "veyr", :large, 14, 8, 8, 7, [
+        { type: "driver", mount: "MD1", arc: %w[F L R] }, { type: "driver", mount: "MD2", arc: %w[F L R] },
+        { type: "missile", mount: "M", arc: %w[F R A L], ammo: 4 }
+      ]),
+      "kestrel_frigate" => ship("Kestrel Frigate", "kestrel", :small, 9, 4, 4, 5, [
+        { type: "beam", mount: "B1", arc: %w[F] }, { type: "beam", mount: "B2", arc: %w[F] },
+        { type: "missile", mount: "M", arc: %w[F R A L], ammo: 3 }, { type: "missile", mount: "M", arc: %w[F R A L], ammo: 3 }
+      ]),
+      "kestrel_cruiser" => ship("Kestrel Cruiser", "kestrel", :medium, 12, 6, 6, 6, [
+        { type: "beam", mount: "B1", arc: %w[F] }, { type: "beam", mount: "B1", arc: %w[F] },
+        { type: "missile", mount: "M", arc: %w[F R A L], ammo: 3 }, { type: "missile", mount: "M", arc: %w[F R A L], ammo: 3 },
+        { type: "missile", mount: "M", arc: %w[F R A L], ammo: 3 }
+      ]),
+      "kestrel_battleship" => ship("Kestrel Battleship", "kestrel", :large, 16, 8, 9, 8, [
+        { type: "beam", mount: "B1", arc: %w[F] }, { type: "beam", mount: "B1", arc: %w[F] },
+        { type: "beam", mount: "B2", arc: %w[L A] }, { type: "beam", mount: "B2", arc: %w[L A] },
+        { type: "beam", mount: "B3", arc: %w[R A] }, { type: "beam", mount: "B3", arc: %w[R A] },
+        { type: "missile", mount: "M", arc: %w[F R A L], ammo: 3 }, { type: "missile", mount: "M", arc: %w[F R A L], ammo: 3 },
+        { type: "missile", mount: "M", arc: %w[F R A L], ammo: 3 }
+      ])
     }.freeze
 
     IMPULSE_DECKS = [

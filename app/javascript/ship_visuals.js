@@ -8,7 +8,7 @@ const HULLS = {
   // Aurelian hulls echo the original Mastafarian split-nacelle silhouettes.
   aurelian_frigate: "M0 -35L9 -23L9 -10L18 8L27 -17L35 -8L28 5L34 24L17 23L9 10L6 32L-6 32L-9 10L-17 23L-34 24L-28 5L-35 -8L-27 -17L-18 8L-9 -10L-9 -23Z",
   aurelian_cruiser: "M0 -37L10 -25L10 -11L19 7L29 -20L38 -10L30 6L37 27L18 26L10 12L7 34L-7 34L-10 12L-18 26L-37 27L-30 6L-38 -10L-29 -20L-19 7L-10 -11L-10 -25Z",
-  aurelian_battleship: "M0 -38L12 -27L12 -12L21 5L31 -22L40 -12L32 7L39 29L19 29L11 14L8 36L-8 36L-11 14L-19 29L-39 29L-32 7L-40 -12L-31 -22L-21 5L-12 -12L-12 -27Z",
+  aurelian_battleship: "M0 -38L12 -27L12 -12L21 5L31 -22L40 -12L32 7L39 29L21 29L15 18L14 36L3 36L3 16L-3 16L-3 36L-14 36L-15 18L-21 29L-39 29L-32 7L-40 -12L-31 -22L-21 5L-12 -12L-12 -27Z",
 
   // Veyr hulls inherit the old Mocha broad, armored wing plan.
   veyr_frigate: "M0 -32L8 -23L14 -10L28 -24L37 -14L31 2L19 9L18 26L9 34L0 27L-9 34L-18 26L-19 9L-31 2L-37 -14L-28 -24L-14 -10L-8 -23Z",
@@ -24,15 +24,15 @@ const HULLS = {
 // Coordinates deliberately place each weapon on a visible part of its hull.
 // Array order matches the weapon order in GameDefinition.
 const HARDPOINTS = {
-  aurelian_frigate: [[-20, 11], [0, -22]],
-  aurelian_cruiser: [[-22, 11], [0, 23], [0, -22]],
-  aurelian_battleship: [[-24, 12], [0, 25], [24, 12]],
-  veyr_frigate: [[17, -9], [0, 12]],
-  veyr_cruiser: [[24, -8], [-15, 14], [0, 10]],
+  aurelian_frigate: [[-25, 5], [-25, 14], [25, 5], [25, 14], [0, -22]],
+  aurelian_cruiser: [[-26, 5], [-26, 14], [26, 5], [26, 14], [0, -22], [0, 7]],
+  aurelian_battleship: [[-28, 2], [-28, 12], [28, 2], [28, 12], [-8.5, 22], [-8.5, 31], [8.5, 22], [8.5, 31], [0, -22], [0, 7]],
+  veyr_frigate: [[0, 10], [0, 19], [22, -9], [-23, -10]],
+  veyr_cruiser: [[-12, 10], [-12, 19], [12, 10], [12, 19], [24, -10], [-24, -10]],
   veyr_battleship: [[-28, -11], [28, -11], [0, 12]],
-  kestrel_frigate: [[0, -22], [0, 8]],
-  kestrel_cruiser: [[-18, 17], [0, -22], [18, 17]],
-  kestrel_battleship: [[-27, 19], [0, -23], [27, 19], [0, 11]]
+  kestrel_frigate: [[0, -22], [0, -13], [-17, 18], [17, 18]],
+  kestrel_cruiser: [[0, -24], [0, -15], [-18, 20], [0, 7], [18, 20]],
+  kestrel_battleship: [[0, -25], [0, -16], [-14, 12], [-15, 21], [14, 12], [15, 21], [-31, 20], [0, 1], [31, 20]]
 };
 
 const WEAPONS = {
@@ -84,7 +84,7 @@ const weaponState = (weapon, ship, hidden) => {
   return weapon.type === "missile" || ship.allocation.weapons.includes(weapon.id) ? "charged" : "standby";
 };
 
-const weaponAbbreviation = (weapon) => ({ beam: "LB", driver: "MD", missile: "SM" })[weapon.type];
+const weaponAbbreviation = (weapon) => weapon.mount || ({ beam: "LB", driver: "MD", missile: "M" })[weapon.type];
 
 const weaponHardpoints = (ship, hidden) => {
   const mounts = HARDPOINTS[ship.key] || [];
@@ -96,7 +96,7 @@ const weaponHardpoints = (ship, hidden) => {
     const pipCount = weapon.type === "missile" ? Math.min(weapon.ammo || 0, 4) : profile.energy;
     const pips = Array.from({ length: pipCount }, (_, pip) => `<circle class="hardpoint-pip" cx="${x - ((pipCount - 1) * .8) + (pip * 1.6)}" cy="${y + 2.55}" r=".4"/>`).join("");
     return `<g class="weapon-hardpoint ${state} ${weapon.id === selectedId ? "selected" : ""}" data-weapon-id="${weapon.id}" data-arcs="${weapon.arc.join(" ")}" data-weapon-label="${profile.label}" tabindex="0" role="button" aria-label="${profile.label}, ${state}">
-      <title>${profile.label} · ${weapon.arc.join("/")} · ${state}</title><rect class="hardpoint-bay" x="${x - 5.25}" y="${y - 5.25}" width="10.5" height="10.5" rx="1.35"/><rect class="hardpoint-control" x="${x - 3.6}" y="${y - 3.6}" width="7.2" height="7.2" rx=".55"/><text x="${x}" y="${y + .8}">${weaponAbbreviation(weapon)}</text>${pips}<path class="hardpoint-damage" d="M${x - 2.6} ${y - 2.6}L${x + 2.6} ${y + 2.6}M${x + 2.6} ${y - 2.6}L${x - 2.6} ${y + 2.6}"/>
+      <title>${profile.label} · ${weapon.arc.join("/")} · ${state}</title><rect class="hardpoint-bay" x="${x - 4.2}" y="${y - 4.2}" width="8.4" height="8.4" rx="1.1"/><rect class="hardpoint-control" x="${x - 3.2}" y="${y - 3.2}" width="6.4" height="6.4" rx=".5"/><text x="${x}" y="${y + .8}">${weaponAbbreviation(weapon)}</text>${pips}<path class="hardpoint-damage" d="M${x - 2.4} ${y - 2.4}L${x + 2.4} ${y + 2.4}M${x + 2.4} ${y - 2.4}L${x - 2.4} ${y + 2.4}"/>
     </g>`;
   }).join("");
 };
@@ -179,8 +179,8 @@ const weaponModule = (weapon, ship, hidden) => {
   const selectedId = (ship.weapons.find((entry) => !entry.destroyed) || ship.weapons[0])?.id;
   const resource = weapon.type === "missile" ? `${weapon.ammo ?? 0} missiles` : `${profile.energy} energy`;
   return `<article class="weapon-module ${state} ${weapon.id === selectedId ? "selected" : ""}" data-weapon-id="${weapon.id}" data-arcs="${weapon.arc.join(" ")}" data-weapon-label="${profile.label}" tabindex="0">
-    <div class="hardpoint"><span>${weapon.type === "beam" ? "LB" : weapon.type === "driver" ? "MD" : "SM"}</span></div>
-    <div><h4>${profile.label}</h4><p>Arc ${weapon.arc.join(" · ")} <i>${resource}</i></p></div>
+    <div class="hardpoint"><span>${weaponAbbreviation(weapon)}</span></div>
+    <div><h4>${profile.label} <small>${weapon.mount || ""}</small></h4><p>Arc ${weapon.arc.join(" · ")} <i>${resource}</i></p></div>
     <strong>${hidden ? "UNREVEALED" : state.toUpperCase()}</strong>
   </article>`;
 };

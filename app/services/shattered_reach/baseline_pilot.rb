@@ -11,9 +11,14 @@ module ShatteredReach
 
       range = RulesEngine.send(:distance, ship["position"], enemy["position"])
       speed = range > 6 ? [4, ship["energy"]].min : 2
-      weapons = ship["weapons"].reject { |weapon| weapon["destroyed"] || weapon["type"] == "missile" }.map { |weapon| weapon["id"] }
-      energy_cost = weapons.sum { |id| GameDefinition::WEAPONS.fetch(ship["weapons"].find { |weapon| weapon["id"] == id }["type"])[ :energy ] }
-      weapons = [] if speed + energy_cost > ship["energy"]
+      budget = [ship["energy"] - ship.dig("damage", "engines").to_i - speed, 0].max
+      weapons = ship["weapons"].reject { |weapon| weapon["destroyed"] || weapon["type"] == "missile" }.each_with_object([]) do |weapon, selected|
+        cost = GameDefinition::WEAPONS.fetch(weapon["type"])[:energy]
+        next if cost > budget
+
+        selected << weapon["id"]
+        budget -= cost
+      end
       { "ship_id" => ship["id"], "speed" => speed, "shields" => 0, "weapons" => weapons }
     end
   end

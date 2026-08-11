@@ -56,6 +56,7 @@ module ShatteredReach
           starting_positions(15).each_with_index { |position, index| state["ships"][index]["position"] = position if state["ships"][index] }
         end
       end
+      migrate_loadouts!(state) if state["version"] != GameDefinition::VERSION
 
       state["ships"].each do |ship|
         spec = GameDefinition::SHIPS[ship["key"]]
@@ -66,6 +67,26 @@ module ShatteredReach
       end
       state
     end
+
+    def self.migrate_loadouts!(state)
+      state["ships"].each do |ship|
+        spec = GameDefinition::SHIPS[ship["key"]]
+        next unless spec
+
+        old_weapons = Array(ship["weapons"])
+        destroyed_count = old_weapons.count { |weapon| weapon["destroyed"] }
+        fired_count = old_weapons.count { |weapon| weapon["fired"] && !weapon["destroyed"] }
+        ship["weapons"] = spec[:weapons].map.with_index do |weapon, index|
+          weapon.stringify_keys.merge("id" => "w#{index}", "destroyed" => index < destroyed_count, "fired" => false)
+        end
+        ship["weapons"].reject { |weapon| weapon["destroyed"] }.first(fired_count).each { |weapon| weapon["fired"] = true }
+        ship["allocation"]["weapons"] = [] if ship["allocation"]
+        ship["locked"] = false if state["phase"] == "allocation"
+      end
+      state["version"] = GameDefinition::VERSION
+      state["log"] << "Fleet registry updated: original weapon batteries restored." if state["log"]
+    end
+    private_class_method :migrate_loadouts!
 
     def self.build_ship(key, player, position)
       spec = GameDefinition::SHIPS.fetch(key)
