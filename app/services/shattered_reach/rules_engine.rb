@@ -2,25 +2,40 @@
 
 module ShatteredReach
   class RulesEngine
+    BOARD_SIZES = [12, 15, 20].freeze
     DIRECTIONS = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]].freeze
 
     class IllegalAction < StandardError; end
 
-    def self.start(scenario: :skirmish, solo: false)
+    def self.start(scenario: :skirmish, solo: false, board_size: 15)
+      board_size = board_size.to_i
+      board_size = 15 unless BOARD_SIZES.include?(board_size)
+      positions = starting_positions(board_size)
       blueprint = scenario == :tutorial ? [%w[aurelian_frigate veyr_frigate]] : [%w[aurelian_cruiser kestrel_cruiser]]
       ships = blueprint.first.each_with_index.map do |ship_key, index|
-        build_ship(ship_key, index.zero? ? "player_one" : "player_two", index.zero? ? [0, 0, 0] : [8, -4, 3])
+        build_ship(ship_key, index.zero? ? "player_one" : "player_two", positions[index])
       end
       {
-        "version" => GameDefinition::VERSION, "scenario" => scenario.to_s, "solo" => solo, "turn" => 1,
+        "version" => GameDefinition::VERSION, "scenario" => scenario.to_s, "solo" => solo, "board_size" => board_size, "turn" => 1,
         "phase" => "allocation", "impulse" => 0, "seed" => 17, "initiative" => nil,
         "ships" => ships, "log" => ["Battle stations. Allocate energy in secret."], "winner" => nil,
         "tutorial_step" => scenario == :tutorial ? 0 : nil
       }
     end
 
+    def self.starting_positions(board_size)
+      separation = [board_size - 3, 15].min
+      left_column = ((board_size - 1 - separation) / 2.0).floor
+      right_column = left_column + separation
+      row = board_size / 2
+
+      [[left_column, row - (left_column / 2), 0], [right_column, row - (right_column / 2), 3]]
+    end
+    private_class_method :starting_positions
+
     def self.apply(state, player:, action:, payload: {})
       state = Marshal.load(Marshal.dump(state))
+      normalize!(state)
       return state if state["winner"]
 
       case action.to_s
@@ -30,6 +45,16 @@ module ShatteredReach
       when "fire" then fire!(state, player, payload)
       when "special" then special!(state, player, payload)
       else raise IllegalAction, "Unknown action: #{action}"
+      end
+      state
+    end
+
+    def self.normalize!(state)
+      return state if state.key?("board_size")
+
+      state["board_size"] = 15
+      if state["turn"] == 1 && state["phase"] == "allocation" && state["impulse"].to_i.zero?
+        starting_positions(15).each_with_index { |position, index| state["ships"][index]["position"] = position if state["ships"][index] }
       end
       state
     end

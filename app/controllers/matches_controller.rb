@@ -8,8 +8,10 @@ class MatchesController < ApplicationController
   end
 
   def create
-    scenario = params[:scenario] == "tutorial" ? :tutorial : :skirmish
-    match = Match.create!(title: scenario == :tutorial ? "First Light Tutorial" : "Shattered Reach Skirmish", state: ShatteredReach::RulesEngine.start(scenario: scenario, solo: params[:solo] == "true"))
+    mode = params[:mode].presence
+    scenario = mode == "tutorial" || params[:scenario] == "tutorial" ? :tutorial : :skirmish
+    solo = mode == "solo" || params[:solo] == "true"
+    match = Match.create!(title: scenario == :tutorial ? "First Light Tutorial" : "Shattered Reach Skirmish", state: ShatteredReach::RulesEngine.start(scenario: scenario, solo: solo, board_size: params[:board_size]))
     redirect_to match
   end
 

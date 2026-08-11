@@ -6,11 +6,15 @@
       <p class="eyebrow">A tactical space-combat prototype</p>
       <h1>THE <em>SHATTERED</em> REACH</h1>
       <p class="lede">Commit power in secret. Read the impulse. Break the enemy fleet before it breaks you.</p>
-      <div class="launch-actions">
-        <%= button_to "Begin a skirmish", matches_path, params: { scenario: "skirmish" }, class: "primary", form: { data: { turbo: false } } %>
-        <%= button_to "Fight the command AI", matches_path, params: { scenario: "skirmish", solo: true }, class: "secondary", form: { data: { turbo: false } } %>
-        <%= button_to "Play the guided tutorial", matches_path, params: { scenario: "tutorial" }, class: "secondary", form: { data: { turbo: false } } %>
-      </div>
+      <%= form_with url: matches_path, class: "launch-form", data: { turbo: false } do |form| %>
+        <%= form.label :board_size, "Battlefield size" %>
+        <%= form.select :board_size, [["12 × 12", 12], ["15 × 15", 15], ["20 × 20", 20]], selected: 15 %>
+        <div class="launch-actions">
+          <%= form.button "Begin a skirmish", name: :mode, value: :hotseat, class: "primary" %>
+          <%= form.button "Fight the command AI", name: :mode, value: :solo, class: "secondary" %>
+          <%= form.button "Play the guided tutorial", name: :mode, value: :tutorial, class: "secondary" %>
+        </div>
+      <% end %>
     </div>
   </section>
 

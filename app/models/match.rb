@@ -3,7 +3,7 @@
 class Match < ApplicationRecord
   validates :state, presence: true
 
-  def game_state = state.deep_dup
+  def game_state = ShatteredReach::RulesEngine.normalize!(state.deep_dup)
 
   def apply!(player:, action:, payload: {})
     self.state = ShatteredReach::RulesEngine.apply(game_state, player: player, action: action, payload: payload)

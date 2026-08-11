@@ -10,8 +10,9 @@ class MatchesControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "a tutorial can be created" do
-    post matches_url, params: { scenario: "tutorial" }
+    post matches_url, params: { mode: "tutorial", board_size: 20 }
     assert_response :redirect
     assert_equal "tutorial", Match.last.state["scenario"]
+    assert_equal 20, Match.last.state["board_size"]
   end
 end

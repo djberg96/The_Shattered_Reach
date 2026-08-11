@@ -27,10 +27,13 @@ export function mountMatch(root) {
       <dl><div><dt>Hull</dt><dd>${ship.hull}/${ship.max_hull}</dd></div><div><dt>Shields</dt><dd>F ${ship.shields.front} · A ${ship.shields.aft}</dd></div><div><dt>Energy</dt><dd>${ship.energy - ship.damage.engines}</dd></div></dl></div>
     </article>`;
   const hexSize = 42;
-  const camera = { q: 4, r: -2 };
+  const boardSize = [12, 15, 20].includes(Number(state.board_size)) ? Number(state.board_size) : 15;
+  const hexHeight = Math.sqrt(3) * hexSize;
+  const boardWidth = (2 * hexSize) + ((boardSize - 1) * 1.5 * hexSize);
+  const boardHeight = (boardSize + .5) * hexHeight;
   const center = (q, r) => {
-    const cameraQ = q - camera.q; const cameraR = r - camera.r;
-    return [390 + (1.5 * hexSize * cameraQ), 255 + (Math.sqrt(3) * hexSize * (cameraR + (cameraQ / 2)))];
+    const row = r + Math.floor(q / 2);
+    return [hexSize + (1.5 * hexSize * q), (hexHeight / 2) + (hexHeight * row) + ((q % 2) * hexHeight / 2)];
   };
   const polygon = (x, y, size = hexSize) => Array.from({ length: 6 }, (_, index) => {
     const angle = (60 * index) * Math.PI / 180;
@@ -38,8 +41,10 @@ export function mountMatch(root) {
   }).join(" ");
   const grid = () => {
     const cells = [];
-    for (let q = -6; q <= 14; q += 1) for (let r = -10; r <= 6; r += 1) {
-      const [x, y] = center(q, r); if (x > -45 && x < 825 && y > -45 && y < 555) cells.push(`<polygon points="${polygon(x, y)}"/>`);
+    for (let row = 0; row < boardSize; row += 1) for (let column = 0; column < boardSize; column += 1) {
+      const q = column; const r = row - Math.floor(column / 2); const [x, y] = center(q, r);
+      const reference = `${row + 1}${String(column + 1).padStart(2, "0")}`;
+      cells.push(`<g class="hex-cell"><polygon points="${polygon(x, y)}"/><text class="hex-reference" x="${x}" y="${y - (hexHeight / 2) + 12}">${reference}</text></g>`);
     }
     return `<g class="hex-grid">${cells.join("")}</g>`;
   };
@@ -74,7 +79,7 @@ export function mountMatch(root) {
     root.innerHTML = `
       <header class="game-header"><a href="/" class="wordmark">THE <strong>SHATTERED</strong> REACH</a><div class="turn-state"><span>TURN ${state.turn}</span><b>${state.winner ? `${state.winner === "player_one" ? "Player One" : "Player Two"} wins` : state.phase === "allocation" ? "Secret allocation" : `Impulse ${state.impulse} · ${state.initiative === player ? "You hold initiative" : "Opponent holds initiative"}`}</b></div><button class="switch-player">Viewing: ${player === "player_one" ? "Player One" : "Player Two"}</button></header>
       <main class="match-layout"><section class="command-panel"><p class="eyebrow">${state.scenario === "tutorial" ? `Tutorial · ${["Set the battle plan", "Reveal allocations", "Watch an impulse", "Fire your first weapon"][state.tutorial_step] || "Continue the engagement"}` : "Fleet command"}</p><h1>${state.phase === "allocation" ? "Commit your energy" : "Command the engagement"}</h1><p class="quiet">${state.log.at(-1)}</p>${current ? controls(current, target) : ""}</section>
-      <section class="battlefield"><div class="nebula"></div><div class="zoom-controls" aria-label="Battlefield zoom"><button class="zoom-out" aria-label="Zoom out">−</button><button class="zoom-reset" aria-label="Reset zoom">${Math.round(zoom * 100)}%</button><button class="zoom-in" aria-label="Zoom in">+</button></div><svg viewBox="0 0 780 510" aria-label="Tactical flat-top hex battlefield" style="width:${zoom * 100}%;max-width:none">${grid()}${state.ships.map(hex).join("")}</svg><div class="battlefield-label">Tactical display · flat-top axial hex grid</div></section>
+      <section class="battlefield"><div class="nebula"></div><div class="zoom-controls" aria-label="Battlefield zoom"><button class="zoom-out" aria-label="Zoom out">−</button><button class="zoom-reset" aria-label="Reset zoom">${Math.round(zoom * 100)}%</button><button class="zoom-in" aria-label="Zoom in">+</button></div><svg viewBox="0 0 ${boardWidth} ${boardHeight}" aria-label="${boardSize} by ${boardSize} tactical flat-top hex battlefield" style="width:${zoom * 100}%;max-width:none">${grid()}${state.ships.map(hex).join("")}</svg><div class="battlefield-label">Tactical display · ${boardSize} × ${boardSize} · numbered flat-top hex grid</div></section>
       <aside class="fleet-status"><h2>Fleet status</h2>${state.ships.map(shipCard).join("")}</aside></main>`;
     bind(current, target);
   };
