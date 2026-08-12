@@ -10,9 +10,15 @@ export function mountMatch(root) {
   let selectedShipId = null;
   let selectedWeaponId = null;
   let impulseModalOpen = Boolean(state.impulse_card && state.activity_step === "movement");
+  let soundEnabled = window.localStorage.getItem("shattered-reach-sound") !== "muted";
+  let audioContext = null;
+  let combatEffectPlaying = false;
+  const combatEffectQueue = [];
+  let lastCombatEventId = Math.max(0, ...(state.combat_events || []).map((event) => Number(event.id) || 0));
   const directions = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]];
 
   const request = async (action, payload = {}) => {
+    ensureAudio();
     const response = await fetch(`/matches/${matchId}/action`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf(), "Accept": "application/json" },
@@ -20,10 +26,14 @@ export function mountMatch(root) {
     });
     const result = await response.json();
     if (!response.ok) { window.alert(result.error); return false; }
+    const newCombatEvents = (result.combat_events || []).filter((event) => Number(event.id) > lastCombatEventId);
+    if (newCombatEvents.length) lastCombatEventId = Math.max(...newCombatEvents.map((event) => Number(event.id)));
     state = result;
     if (action === "fire") selectedWeaponId = null;
     if (action === "advance_impulse") impulseModalOpen = true;
-    render(); return true;
+    render();
+    enqueueCombatEffects(newCombatEvents);
+    return true;
   };
 
   const enemies = () => state.ships.filter((ship) => ship.player !== player && !ship.destroyed);
@@ -56,6 +66,84 @@ export function mountMatch(root) {
     const angle = (60 * index) * Math.PI / 180;
     return `${(x + size * Math.cos(angle)).toFixed(1)},${(y + size * Math.sin(angle)).toFixed(1)}`;
   }).join(" ");
+  const ensureAudio = () => {
+    if (!soundEnabled) return null;
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) return null;
+    audioContext ||= new AudioContext();
+    if (audioContext.state === "suspended") audioContext.resume();
+    return audioContext;
+  };
+  const tone = (context, { start, duration, frequency, endFrequency, type = "sine", volume = .08, delay = 0 }) => {
+    const oscillator = context.createOscillator(); const gain = context.createGain();
+    oscillator.type = type;
+    oscillator.frequency.setValueAtTime(frequency, start + delay);
+    oscillator.frequency.exponentialRampToValueAtTime(Math.max(20, endFrequency || frequency), start + delay + duration);
+    gain.gain.setValueAtTime(.0001, start + delay);
+    gain.gain.exponentialRampToValueAtTime(volume, start + delay + .015);
+    gain.gain.exponentialRampToValueAtTime(.0001, start + delay + duration);
+    oscillator.connect(gain).connect(context.destination);
+    oscillator.start(start + delay); oscillator.stop(start + delay + duration + .02);
+  };
+  const noise = (context, { start, duration, volume = .08, delay = 0, frequency = 800 }) => {
+    const samples = Math.ceil(context.sampleRate * duration); const buffer = context.createBuffer(1, samples, context.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let index = 0; index < samples; index += 1) data[index] = (Math.random() * 2 - 1) * (1 - (index / samples));
+    const source = context.createBufferSource(); const filter = context.createBiquadFilter(); const gain = context.createGain();
+    source.buffer = buffer; filter.type = "lowpass"; filter.frequency.value = frequency; gain.gain.value = volume;
+    source.connect(filter).connect(gain).connect(context.destination); source.start(start + delay);
+  };
+  const playWeaponSound = (event) => {
+    const context = ensureAudio(); if (!context) return;
+    const now = context.currentTime;
+    if (event.weapon_type === "beam") {
+      tone(context, { start: now, duration: .42, frequency: 1150, endFrequency: 180, type: "sawtooth", volume: .055 });
+      tone(context, { start: now, duration: .34, frequency: 1700, endFrequency: 390, type: "sine", volume: .045, delay: .025 });
+    } else {
+      tone(context, { start: now, duration: .3, frequency: 145, endFrequency: 42, type: "square", volume: .09 });
+      noise(context, { start: now, duration: .22, volume: .075, frequency: 520 });
+    }
+    if (event.hit) {
+      noise(context, { start: now, duration: .38, volume: .1, delay: event.weapon_type === "beam" ? .24 : .48, frequency: 1150 });
+      tone(context, { start: now, duration: .38, frequency: 210, endFrequency: 48, type: "sine", volume: .12, delay: event.weapon_type === "beam" ? .24 : .48 });
+    } else {
+      tone(context, { start: now, duration: .24, frequency: 360, endFrequency: 120, type: "sine", volume: .035, delay: event.weapon_type === "beam" ? .25 : .5 });
+    }
+  };
+  const combatEffectMarkup = (event) => {
+    const [startX, startY] = center(...event.origin); const [targetX, targetY] = center(...event.target_position);
+    const dx = targetX - startX; const dy = targetY - startY; const length = Math.hypot(dx, dy) || 1;
+    const missSide = Number(event.id) % 2 ? 1 : -1; const missOffset = Math.min(48, Math.max(35, length * .16));
+    const endX = event.hit ? targetX : targetX + ((-dy / length) * missOffset * missSide);
+    const endY = event.hit ? targetY : targetY + ((dx / length) * missOffset * missSide);
+    const resultText = event.hit ? `HIT · ${event.roll}` : `MISS · ${event.roll}`;
+    const trajectory = event.weapon_type === "beam"
+      ? `<line class="weapon-beam-halo" x1="${startX}" y1="${startY}" x2="${endX}" y2="${endY}"/><line class="weapon-beam-core" x1="${startX}" y1="${startY}" x2="${endX}" y2="${endY}"/>`
+      : `<line class="driver-trajectory" x1="${startX}" y1="${startY}" x2="${endX}" y2="${endY}"/><circle class="driver-projectile" r="4"><animateMotion dur="520ms" path="M ${startX} ${startY} L ${endX} ${endY}" fill="freeze"/></circle>`;
+    return `<g class="combat-effect weapon-${event.weapon_type} result-${event.hit ? "hit" : "miss"}" aria-label="${event.weapon_label} ${event.hit ? "hits" : "misses"} ${event.target_name}, roll ${event.roll}">
+      ${trajectory}
+      <g class="muzzle-flash" transform="translate(${startX} ${startY})"><circle r="6"/><path d="M-13 0H13M0-13V13M-9-9L9 9M9-9L-9 9"/></g>
+      <g class="impact-burst" transform="translate(${targetX} ${targetY})"><circle class="impact-ring" r="8"/><circle class="impact-core" r="5"/><path d="M-20 0H20M0-20V20M-14-14L14 14M14-14L-14 14"/></g>
+      <g class="combat-result-marker" transform="translate(${targetX} ${targetY - 31})"><rect x="-31" y="-10" width="62" height="20" rx="2"/><text y="3">${resultText}</text></g>
+    </g>`;
+  };
+  const playNextCombatEffect = () => {
+    if (combatEffectPlaying || combatEffectQueue.length === 0) return;
+    const event = combatEffectQueue.shift(); const svg = root.querySelector(".battlefield svg");
+    if (!svg) return;
+    combatEffectPlaying = true;
+    svg.insertAdjacentHTML("beforeend", combatEffectMarkup(event));
+    playWeaponSound(event);
+    window.setTimeout(() => {
+      root.querySelector(".combat-effect")?.remove();
+      combatEffectPlaying = false;
+      playNextCombatEffect();
+    }, 1650);
+  };
+  const enqueueCombatEffects = (events) => {
+    combatEffectQueue.push(...events);
+    playNextCombatEffect();
+  };
   const grid = () => {
     const cells = [];
     for (let row = 0; row < boardSize; row += 1) for (let column = 0; column < boardSize; column += 1) {
@@ -187,6 +275,12 @@ export function mountMatch(root) {
     root.querySelector(".zoom-out")?.addEventListener("click", () => { zoom = Math.max(.75, zoom - .25); render(); });
     root.querySelector(".zoom-reset")?.addEventListener("click", () => { zoom = 1; render(); });
     root.querySelector(".zoom-in")?.addEventListener("click", () => { zoom = Math.min(1.75, zoom + .25); render(); });
+    root.querySelector(".sound-toggle")?.addEventListener("click", () => {
+      soundEnabled = !soundEnabled;
+      window.localStorage.setItem("shattered-reach-sound", soundEnabled ? "enabled" : "muted");
+      if (soundEnabled) ensureAudio();
+      render();
+    });
     const updateEnergyBudget = () => {
       const speed = Number(root.querySelector("#speed")?.value || 0);
       const shields = Number(root.querySelector("#front-shields")?.value || 0) + Number(root.querySelector("#aft-shields")?.value || 0);
@@ -301,7 +395,7 @@ export function mountMatch(root) {
     root.innerHTML = `
       <header class="game-header"><a href="/" class="wordmark">THE <strong>SHATTERED</strong> REACH</a><div class="turn-state"><span>TURN ${state.turn}${state.phase === "impulse" ? ` · IMPULSE ${state.impulse}` : ""}</span><b>${state.winner ? `${state.winner === "player_one" ? "Player One" : "Player Two"} wins` : state.phase === "allocation" ? "Secret allocation" : activityLabel}</b></div>${identity}</header>
       <main class="match-layout"><section class="command-panel"><p class="eyebrow">${state.solo ? `Solo command · Your ship: ${current?.name}` : state.scenario === "tutorial" ? `Tutorial · ${["Set the battle plan", "Reveal allocations", "Choose a maneuver", "Fire your first weapon"][state.tutorial_step] || "Continue the engagement"}` : "Fleet command"}</p><h1>${commandTitle}</h1><p class="quiet">${state.log.at(-1)}</p>${current ? controls(current, target) : ""}</section>
-      <section class="battlefield"><div class="nebula"></div><div class="zoom-controls" aria-label="Battlefield zoom"><button class="zoom-out" aria-label="Zoom out">−</button><button class="zoom-reset" aria-label="Reset zoom">${Math.round(zoom * 100)}%</button><button class="zoom-in" aria-label="Zoom in">+</button></div><svg viewBox="0 0 ${boardWidth} ${boardHeight}" aria-label="${boardSize} by ${boardSize} tactical flat-top hex battlefield" style="width:${zoom * 100}%;max-width:none">${grid()}${movementChoices()}${state.ships.map(hex).join("")}${(state.missiles || []).map(missileCounter).join("")}</svg><div class="battlefield-label">Tactical display · ${boardSize} × ${boardSize} · numbered flat-top hex grid</div></section>
+      <section class="battlefield"><div class="nebula"></div><div class="zoom-controls" aria-label="Battlefield controls"><button class="sound-toggle" aria-label="${soundEnabled ? "Mute" : "Enable"} weapon sounds" aria-pressed="${soundEnabled}">${soundEnabled ? "SOUND ON" : "MUTED"}</button><button class="zoom-out" aria-label="Zoom out">−</button><button class="zoom-reset" aria-label="Reset zoom">${Math.round(zoom * 100)}%</button><button class="zoom-in" aria-label="Zoom in">+</button></div><svg viewBox="0 0 ${boardWidth} ${boardHeight}" aria-label="${boardSize} by ${boardSize} tactical flat-top hex battlefield" style="width:${zoom * 100}%;max-width:none">${grid()}${movementChoices()}${state.ships.map(hex).join("")}${(state.missiles || []).map(missileCounter).join("")}</svg><div class="battlefield-label">Tactical display · ${boardSize} × ${boardSize} · numbered flat-top hex grid</div></section>
       <aside class="fleet-status"><h2>Fleet status</h2><p class="fleet-status-hint">${state.solo ? "Your ship is selectable; the opposing ship is controlled by the AI." : "Select a ship for its combat schematic."}</p>${state.ships.map(shipCard).join("")}</aside></main>${selectedShip ? shipSchematic(selectedShip, state, player) : ""}${impulseModal()}<aside id="weapon-hover-hint" class="weapon-hover-hint fleet-${current?.fleet || "aurelian"}" role="tooltip" aria-hidden="true"></aside>`;
     bind(current, target);
   };

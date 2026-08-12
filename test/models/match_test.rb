@@ -33,6 +33,25 @@ class MatchTest < ActiveSupport::TestCase
     assert_match(/Kestrel Cruiser launches/, match.state["log"].last)
   end
 
+  test "solo opponent records every autonomous weapon shot for presentation" do
+    state = ShatteredReach::RulesEngine.start(solo: true)
+    human, opponent = state["ships"]
+    human["position"] = [0, 0, 0]
+    opponent["position"] = [2, 0, 3]
+    opponent["allocation"]["weapons"] = opponent["weapons"].select { |weapon| weapon["type"] == "beam" }.map { |weapon| weapon["id"] }
+    state["phase"] = "impulse"
+    state["impulse"] = 1
+    state["activity_step"] = "launch"
+    match = Match.create!(title: "Solo effects", state: state)
+
+    match.apply!(player: "player_one", action: "finish_launches", payload: {})
+
+    events = match.state["combat_events"]
+    assert_operator events.length, :>=, 2
+    assert events.all? { |event| event["attacker_id"] == opponent["id"] }
+    assert_equal events.map { |event| event["id"] }.uniq, events.map { |event| event["id"] }
+  end
+
   test "solo command can resolve a complete staged turn without AI ownership errors" do
     match = Match.create!(title: "Solo full turn", state: ShatteredReach::RulesEngine.start(solo: true))
     ship = match.state["ships"].first

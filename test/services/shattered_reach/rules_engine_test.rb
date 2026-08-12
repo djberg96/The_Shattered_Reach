@@ -157,6 +157,11 @@ class ShatteredReach::RulesEngineTest < ActiveSupport::TestCase
 
     assert_operator result["ships"].last["shields"]["front"], :<, before_shield
     assert_equal target["hull"], result["ships"].last["hull"]
+    assert_equal({
+      "weapon_type" => "beam", "attacker_id" => attacker["id"], "target_id" => target["id"],
+      "origin" => attacker["position"], "target_position" => target["position"], "roll" => 5,
+      "to_hit" => 4, "hit" => true
+    }, result["combat_events"].last.slice("weapon_type", "attacker_id", "target_id", "origin", "target_position", "roll", "to_hit", "hit"))
   end
 
   test "a missile launches after movement without immediately damaging its target" do
@@ -234,6 +239,9 @@ class ShatteredReach::RulesEngineTest < ActiveSupport::TestCase
 
     assert_equal ["missile-1"], result["missiles"].map { |missile| missile["id"] }
     assert_match(/misses a seeker missile \(3\)/, result["log"].last)
+    assert_equal false, result["combat_events"].last["hit"]
+    assert_equal 4, result["combat_events"].last["to_hit"]
+    assert_equal "missile", result["combat_events"].last["target_type"]
   end
 
   test "a ship cannot fire on its own missile" do

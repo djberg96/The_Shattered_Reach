@@ -23,6 +23,7 @@ module ShatteredReach
         "activity_step" => "allocation", "impulse_card" => nil, "impulse_phase" => nil, "impulse_card_number" => nil,
         "impulse_order" => nil, "pending_movement" => [], "movement_options" => [],
         "ships" => ships, "missiles" => [], "next_missile_id" => 1,
+        "combat_events" => [], "next_combat_event_id" => 1,
         "log" => ["Battle stations. Allocate energy in secret."], "winner" => nil,
         "tutorial_step" => scenario == :tutorial ? 0 : nil
       }
@@ -68,6 +69,8 @@ module ShatteredReach
       migrate_loadouts!(state) if state["version"] != GameDefinition::VERSION
       state["missiles"] ||= []
       state["next_missile_id"] ||= state["missiles"].length + 1
+      state["combat_events"] ||= []
+      state["next_combat_event_id"] ||= state["combat_events"].map { |event| event["id"].to_i }.max.to_i + 1
       state["activity_step"] ||= state["phase"] == "allocation" ? "allocation" : "fire"
       state["impulse_card"] ||= nil
       state["impulse_phase"] ||= nil
@@ -361,10 +364,34 @@ module ShatteredReach
         target_name = target_type == :missile ? "a seeker missile" : target["name"]
         log!(state, "#{attacker["name"]} misses #{target_name} (#{roll}).")
       end
+      record_combat_event!(state, attacker:, target:, target_type:, weapon:, profile:, roll:, to_hit:, hit:)
       state["tutorial_step"] = 3 if state["scenario"] == "tutorial"
       check_victory!(state)
     end
     private_class_method :fire!
+
+    def self.record_combat_event!(state, attacker:, target:, target_type:, weapon:, profile:, roll:, to_hit:, hit:)
+      event_id = state["next_combat_event_id"]
+      state["next_combat_event_id"] += 1
+      state["combat_events"] << {
+        "id" => event_id,
+        "kind" => "weapon_fire",
+        "weapon_type" => weapon["type"],
+        "weapon_label" => profile[:label],
+        "attacker_id" => attacker["id"],
+        "attacker_name" => attacker["name"],
+        "target_id" => target["id"],
+        "target_name" => target_type == :missile ? "Seeker missile" : target["name"],
+        "target_type" => target_type.to_s,
+        "origin" => attacker["position"].dup,
+        "target_position" => target["position"].dup,
+        "roll" => roll,
+        "to_hit" => to_hit,
+        "hit" => hit
+      }
+      state["combat_events"] = state["combat_events"].last(24)
+    end
+    private_class_method :record_combat_event!
 
     def self.target_in_arc?(attacker, target, arcs)
       bearing = DIRECTIONS.each_index.select do |direction|
