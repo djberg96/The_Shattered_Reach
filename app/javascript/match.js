@@ -99,6 +99,7 @@ export function mountMatch(root) {
   const playWeaponSound = (event) => {
     const context = ensureAudio(); if (!context) return;
     const now = context.currentTime;
+    const impactDelay = event.weapon_type === "beam" ? .24 : .48;
     if (event.weapon_type === "beam") {
       tone(context, { start: now, duration: .42, frequency: 1150, endFrequency: 180, type: "sawtooth", volume: .055 });
       tone(context, { start: now, duration: .34, frequency: 1700, endFrequency: 390, type: "sine", volume: .045, delay: .025 });
@@ -107,8 +108,14 @@ export function mountMatch(root) {
       noise(context, { start: now, duration: .22, volume: .075, frequency: 520 });
     }
     if (event.hit) {
-      noise(context, { start: now, duration: .38, volume: .1, delay: event.weapon_type === "beam" ? .24 : .48, frequency: 1150 });
-      tone(context, { start: now, duration: .38, frequency: 210, endFrequency: 48, type: "sine", volume: .12, delay: event.weapon_type === "beam" ? .24 : .48 });
+      noise(context, { start: now, duration: .38, volume: .1, delay: impactDelay, frequency: 1150 });
+      tone(context, { start: now, duration: .38, frequency: 210, endFrequency: 48, type: "sine", volume: .12, delay: impactDelay });
+      if (event.damage?.destroyed) {
+        noise(context, { start: now, duration: 1.2, volume: .16, delay: impactDelay + .12, frequency: 720 });
+        noise(context, { start: now, duration: .75, volume: .11, delay: impactDelay + .5, frequency: 240 });
+        tone(context, { start: now, duration: 1.35, frequency: 150, endFrequency: 24, type: "sawtooth", volume: .14, delay: impactDelay + .12 });
+        tone(context, { start: now, duration: .7, frequency: 72, endFrequency: 26, type: "square", volume: .1, delay: impactDelay + .48 });
+      }
     } else {
       tone(context, { start: now, duration: .24, frequency: 360, endFrequency: 120, type: "sine", volume: .035, delay: event.weapon_type === "beam" ? .25 : .5 });
     }
@@ -119,14 +126,17 @@ export function mountMatch(root) {
     const missSide = Number(event.id) % 2 ? 1 : -1; const missOffset = Math.min(48, Math.max(35, length * .16));
     const endX = event.hit ? targetX : targetX + ((-dy / length) * missOffset * missSide);
     const endY = event.hit ? targetY : targetY + ((dx / length) * missOffset * missSide);
-    const resultText = event.hit ? `HIT · ${event.roll}` : `MISS · ${event.roll}`;
+    const destroyed = Boolean(event.damage?.destroyed);
+    const resultText = destroyed ? "DESTROYED" : event.hit ? `HIT · ${event.roll}` : `MISS · ${event.roll}`;
     const trajectory = event.weapon_type === "beam"
       ? `<line class="weapon-beam-halo" x1="${startX}" y1="${startY}" x2="${endX}" y2="${endY}"/><line class="weapon-beam-core" x1="${startX}" y1="${startY}" x2="${endX}" y2="${endY}"/>`
       : `<line class="driver-trajectory" x1="${startX}" y1="${startY}" x2="${endX}" y2="${endY}"/><circle class="driver-projectile" r="4"><animateMotion dur="520ms" path="M ${startX} ${startY} L ${endX} ${endY}" fill="freeze"/></circle>`;
-    return `<g class="combat-effect weapon-${event.weapon_type} result-${event.hit ? "hit" : "miss"}" aria-label="${event.weapon_label} ${event.hit ? "hits" : "misses"} ${event.target_name}, roll ${event.roll}">
+    const destruction = destroyed ? `<g class="ship-explosion" transform="translate(${targetX} ${targetY})" aria-hidden="true"><circle class="explosion-glare" r="10"/><circle class="explosion-core" r="13"/><circle class="explosion-ring explosion-ring-one" r="15"/><circle class="explosion-ring explosion-ring-two" r="22"/><path class="explosion-rays" d="M0-58V-15M41-41L11-11M58 0H15M41 41L11 11M0 58V15M-41 41L-11 11M-58 0H-15M-41-41L-11-11"/><path class="explosion-debris" d="M-5-8L-27-48M7-5L48-27M8 5L39 47M-6 8L-41 39M-10 0L-55-12M9-1L54 15"/></g>` : "";
+    return `<g class="combat-effect weapon-${event.weapon_type} result-${event.hit ? "hit" : "miss"} ${destroyed ? "result-destroyed" : ""}" aria-label="${event.weapon_label} ${destroyed ? "destroys" : event.hit ? "hits" : "misses"} ${event.target_name}, roll ${event.roll}">
       ${trajectory}
       <g class="muzzle-flash" transform="translate(${startX} ${startY})"><circle r="6"/><path d="M-13 0H13M0-13V13M-9-9L9 9M9-9L-9 9"/></g>
       <g class="impact-burst" transform="translate(${targetX} ${targetY})"><circle class="impact-ring" r="8"/><circle class="impact-core" r="5"/><path d="M-20 0H20M0-20V20M-14-14L14 14M14-14L-14 14"/></g>
+      ${destruction}
       <g class="combat-result-marker" transform="translate(${targetX} ${targetY - 31})"><rect x="-31" y="-10" width="62" height="20" rx="2"/><text y="3">${resultText}</text></g>
     </g>`;
   };
@@ -149,7 +159,7 @@ export function mountMatch(root) {
       } else {
         playNextCombatEffect();
       }
-    }, 1650);
+    }, event.damage?.destroyed ? 2850 : 1650);
   };
   const enqueueCombatEffects = (events) => {
     combatEffectQueue.push(...events);

@@ -236,6 +236,29 @@ class ShatteredReach::RulesEngineTest < ActiveSupport::TestCase
     assert_equal target["weapons"].first["id"], damage["weapons"].first["id"]
   end
 
+  test "a killing hit marks its combat event for the destruction animation" do
+    state = ShatteredReach::RulesEngine.start
+    attacker, target = state["ships"]
+    attacker["position"] = [0, 0, 0]
+    target["position"] = [1, 0, 3]
+    target["shields"] = { "front" => 0, "aft" => 0 }
+    target["hull"] = 1
+    target["weapons"].each { |weapon| weapon["destroyed"] = true }
+    weapon = attacker["weapons"].find { |entry| entry["type"] == "beam" }
+    weapon["arc"] = ["F"]
+    attacker["allocation"]["weapons"] = [weapon["id"]]
+    state["phase"] = "impulse"
+    state["impulse"] = 1
+    state["activity_step"] = "fire"
+    state["impulse_order"] = Array.new(3) { [0, 1, 2, 3] }
+    state["seed"] = 3
+
+    result = ShatteredReach::RulesEngine.apply(state, player: attacker["player"], action: "fire", payload: { "ship_id" => attacker["id"], "target_id" => target["id"], "weapon_id" => weapon["id"] })
+
+    assert result["ships"].last["destroyed"]
+    assert result["combat_events"].last.dig("damage", "destroyed")
+  end
+
   test "a missile launches after movement without immediately damaging its target" do
     state = ShatteredReach::RulesEngine.start
     target, attacker = state["ships"]
