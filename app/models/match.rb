@@ -6,7 +6,16 @@ class Match < ApplicationRecord
   def game_state = ShatteredReach::RulesEngine.normalize!(state.deep_dup)
 
   def apply!(player:, action:, payload: {})
-    self.state = ShatteredReach::RulesEngine.apply(game_state, player: player, action: action, payload: payload)
+    current_state = game_state
+    if action.to_s == "undo_movement"
+      restore_movement_checkpoint!(current_state, player)
+      save!
+      return
+    end
+
+    movement_checkpoint = movement_action?(action) ? build_movement_checkpoint(current_state, player) : nil
+    current_state.delete("movement_undo")
+    self.state = ShatteredReach::RulesEngine.apply(current_state, player: player, action: action, payload: payload)
     if state["solo"] && player == "player_one"
       run_solo_opponent! if action.to_s == "lock_allocation" && state["phase"] == "allocation"
       if %w[advance_impulse move_ship special].include?(action.to_s) && state["phase"] == "impulse" && !state["winner"]
@@ -15,10 +24,31 @@ class Match < ApplicationRecord
       end
       run_solo_combat! if action.to_s == "finish_launches" && state["activity_step"] == "fire" && !state["winner"]
     end
+    state["movement_undo"] = movement_checkpoint if movement_checkpoint
     save!
   end
 
   private
+
+  def movement_action?(action) = %w[move_ship special].include?(action.to_s)
+
+  def build_movement_checkpoint(current_state, player)
+    snapshot = current_state.deep_dup
+    snapshot.delete("movement_undo")
+    { "player" => player, "state" => snapshot }
+  end
+
+  def restore_movement_checkpoint!(current_state, player)
+    checkpoint = current_state["movement_undo"]
+    unless checkpoint && checkpoint["player"] == player && checkpoint["state"].is_a?(Hash)
+      raise ShatteredReach::RulesEngine::IllegalAction, "No movement is available to undo"
+    end
+
+    restored = checkpoint["state"].deep_dup
+    restored.delete("movement_undo")
+    restored["log"] << "#{player == "player_one" ? "Player One" : "Player Two"} undoes the last movement decision."
+    self.state = ShatteredReach::RulesEngine.normalize!(restored)
+  end
 
   def run_solo_opponent!
     allocation = ShatteredReach::BaselinePilot.allocation(state, "player_two")

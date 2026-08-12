@@ -3,6 +3,75 @@
 require "test_helper"
 
 class MatchTest < ActiveSupport::TestCase
+  test "movement can be undone to its complete decision point" do
+    state = ShatteredReach::RulesEngine.start
+    ship = state["ships"].first
+    state["phase"] = "impulse"
+    state["impulse"] = 1
+    state["activity_step"] = "movement"
+    state["pending_movement"] = [ship["id"]]
+    state["movement_options"] = ShatteredReach::RulesEngine.legal_movement_actions(state, ship["id"])
+    match = Match.create!(title: "Movement undo", state: state)
+    before = match.game_state
+
+    match.apply!(player: ship["player"], action: "move_ship", payload: { "ship_id" => ship["id"], "maneuver" => "forward" })
+    refute_equal before["ships"].first["position"], match.state["ships"].first["position"]
+
+    match.apply!(player: ship["player"], action: "undo_movement", payload: {})
+
+    assert_equal before["ships"], match.state["ships"]
+    assert_equal before["activity_step"], match.state["activity_step"]
+    assert_equal before["pending_movement"], match.state["pending_movement"]
+    assert_equal before["movement_options"], match.state["movement_options"]
+    assert_nil match.state["movement_undo"]
+    assert_match(/undoes the last movement decision/, match.state["log"].last)
+  end
+
+  test "solo undo rewinds the player's move and subsequent AI movement and launch" do
+    state = ShatteredReach::RulesEngine.start(solo: true)
+    human, opponent = state["ships"]
+    state["phase"] = "impulse"
+    state["impulse"] = 1
+    state["activity_step"] = "movement"
+    state["pending_movement"] = [human["id"], opponent["id"]]
+    state["movement_options"] = ShatteredReach::RulesEngine.legal_movement_actions(state, human["id"])
+    match = Match.create!(title: "Solo movement undo", state: state)
+    before = match.game_state
+
+    match.apply!(player: "player_one", action: "move_ship", payload: { "ship_id" => human["id"], "maneuver" => "forward" })
+
+    assert_equal "launch", match.state["activity_step"]
+    assert_equal 1, match.state["missiles"].length
+    refute_equal before["ships"].map { |ship| ship["position"] }, match.state["ships"].map { |ship| ship["position"] }
+
+    match.apply!(player: "player_one", action: "undo_movement", payload: {})
+
+    assert_equal before["ships"], match.state["ships"]
+    assert_empty match.state["missiles"]
+    assert_equal "movement", match.state["activity_step"]
+    assert_equal [human["id"], opponent["id"]], match.state["pending_movement"]
+  end
+
+  test "continuing beyond missile launch invalidates movement undo" do
+    state = ShatteredReach::RulesEngine.start
+    ship = state["ships"].first
+    state["phase"] = "impulse"
+    state["impulse"] = 1
+    state["activity_step"] = "movement"
+    state["pending_movement"] = [ship["id"]]
+    state["movement_options"] = ShatteredReach::RulesEngine.legal_movement_actions(state, ship["id"])
+    match = Match.create!(title: "Movement undo boundary", state: state)
+    match.apply!(player: ship["player"], action: "move_ship", payload: { "ship_id" => ship["id"], "maneuver" => "forward" })
+
+    assert match.state["movement_undo"]
+    match.apply!(player: ship["player"], action: "finish_launches", payload: {})
+    assert_nil match.state["movement_undo"]
+
+    assert_raises(ShatteredReach::RulesEngine::IllegalAction) do
+      match.apply!(player: ship["player"], action: "undo_movement", payload: {})
+    end
+  end
+
   test "solo lock runs a legal opponent allocation" do
     match = Match.create!(title: "Solo", state: ShatteredReach::RulesEngine.start(solo: true))
     ship = match.state["ships"].first
