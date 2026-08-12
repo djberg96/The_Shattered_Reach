@@ -96,13 +96,25 @@ export function mountMatch(root) {
     const order = { movement: 0, launch: 1, fire: 2 };
     return `<div class="activity-strip">${steps.map(([step, label]) => `<span class="${state.activity_step === step ? "current" : order[state.activity_step] > order[step] ? "done" : ""}">${label}</span>`).join("")}</div>`;
   };
+  const speedRelationship = (speed) => {
+    const yours = state.ships.some((ship) => ship.player === player && !ship.destroyed && Number(ship.allocation.speed) === speed);
+    const opponents = state.ships.some((ship) => ship.player !== player && !ship.destroyed && Number(ship.allocation.speed) === speed);
+    if (yours && opponents) return { className: "both-speed", label: "Both ships" };
+    if (yours) return { className: "your-speed", label: "Your ship" };
+    if (opponents) return { className: "opponent-speed", label: "Opponent" };
+    return { className: "", label: "" };
+  };
+  const speedTile = (speed) => {
+    const relationship = speedRelationship(speed);
+    return `<strong class="${relationship.className}" aria-label="Speed ${speed}${relationship.label ? `, ${relationship.label} moves` : ""}"><b>${speed}</b>${relationship.label ? `<small>${relationship.label}</small>` : ""}</strong>`;
+  };
   const impulseModal = () => {
     if (!impulseModalOpen || !state.impulse_card) return "";
     return `<div class="impulse-modal-backdrop" role="presentation"><section class="impulse-modal" role="dialog" aria-modal="true" aria-labelledby="impulse-modal-title">
       <p class="eyebrow">Impulse ${state.impulse} · Original card #${state.impulse_card_number}</p>
       <h2 id="impulse-modal-title">Phase ${state.impulse_phase}<br><span>Movement</span></h2>
       <p class="impulse-modal-label">Speeds that move</p>
-      <div class="impulse-speeds speed-count-${state.impulse_card.length}">${state.impulse_card.map((speed) => `<strong>${speed}</strong>`).join("")}</div>
+      <div class="impulse-speeds speed-count-${state.impulse_card.length}">${state.impulse_card.map(speedTile).join("")}</div>
       <button class="primary dismiss-impulse">${state.activity_step === "movement" ? "Continue to movement" : "Continue to missile launch"}</button>
     </section></div>`;
   };
@@ -132,7 +144,7 @@ export function mountMatch(root) {
       const labels = { forward: "Move forward", sideslip_left: "Side-slip port", sideslip_right: "Side-slip starboard", turn_left: "Turn 60° port", turn_right: "Turn 60° starboard", lose_movement: "Lose blocked movement" };
       const options = (state.movement_options || []).map((maneuver) => `<button class="${maneuver === "forward" ? "primary" : "secondary"} move-ship" data-maneuver="${maneuver}">${labels[maneuver]}</button>`).join("");
       const special = movingShip.special_available ? `<details class="special-maneuvers"><summary>Use one-time special maneuver</summary><button class="secondary special" data-special="emergency_power">Emergency power · extra forward move</button><button class="secondary special" data-special="quick_stop">Quick stop · speed zero</button><label>Bootlegger heading<select id="bootlegger-facing">${["East", "Northeast", "Northwest", "West", "Southwest", "Southeast"].map((label, direction) => `<option value="${direction}" ${movingShip.position[2] === direction ? "selected" : ""}>${label}</option>`).join("")}</select></label><button class="secondary bootlegger">Bootlegger · rotate freely</button></details>` : "";
-      return `<div class="control-stack">${activityStrip()}<p class="step-callout"><b>${movingShip.name}</b> has a movement opportunity.</p><p class="step-help">Choose one highlighted destination or turn in place. Turn mode ${currentTurnMode(movingShip)}: ${movingShip.movement?.hexes_since_turn || 0} forward hexes accumulated.</p><div class="impulse-card"><span>Movement card</span><b>${(state.impulse_card || []).join(" · ")}</b></div>${options}${special}</div>`;
+      return `<div class="control-stack">${activityStrip()}<p class="step-callout"><b>${movingShip.name}</b> has a movement opportunity.</p><p class="step-help">Choose one highlighted destination or turn in place. Turn mode ${currentTurnMode(movingShip)}: ${movingShip.movement?.hexes_since_turn || 0} forward hexes accumulated.</p><div class="impulse-card"><span>Movement card</span><b>${(state.impulse_card || []).map((speed) => { const relationship = speedRelationship(speed); return `<i class="${relationship.className}">${speed}</i>`; }).join("<em>·</em>")}</b></div>${options}${special}</div>`;
     }
     if (state.activity_step === "launch") {
       const launchers = target ? ship.weapons.filter((weapon) => weapon.type === "missile" && !weapon.destroyed && !weapon.fired && weapon.ammo > 0) : [];
