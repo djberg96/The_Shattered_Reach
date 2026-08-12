@@ -48,7 +48,7 @@ export function mountMatch(root) {
     return directWeaponLegal(attacker, target, weapon) ? "legal" : "illegal";
   };
   const shipCard = (ship) => { const selectable = !state.solo || ship.player === player; const target = targetStatus(ship); const relationship = state.solo ? ship.player === player ? "Your ship" : "AI opponent" : ship.player === "player_one" ? "Player One" : "Player Two"; return `
-    <article class="ship-card fleet-${ship.fleet} ${ship.destroyed ? "destroyed" : ""} ${target ? `target-candidate ${target}` : selectable ? "selectable" : "readonly ai-opponent"}" ${target ? `data-target-id="${ship.id}" role="button" tabindex="0" aria-label="${ship.name}, ${target} target"` : selectable ? `data-ship-id="${ship.id}" role="button" tabindex="0" aria-label="Open ${ship.name} schematic"` : `aria-label="${ship.name}, AI-controlled opponent"`}>
+    <article class="ship-card fleet-${ship.fleet} ${ship.destroyed ? "destroyed" : ""} ${target ? `target-candidate ${target}` : selectable ? "selectable" : "readonly ai-opponent"}" data-ship-hover-id="${ship.id}" ${target ? `data-target-id="${ship.id}" role="button" tabindex="0" aria-label="${ship.name}, ${target} target"` : selectable ? `data-ship-id="${ship.id}" role="button" tabindex="0" aria-label="Open ${ship.name} schematic"` : `aria-label="${ship.name}, AI-controlled opponent"`}>
       <div class="ship-card-icon">${shipGlyph(ship, "ship-glyph-card")}</div>
       <div><p class="eyebrow">${relationship} · ${fleetName(ship.fleet)} · ${ship.size}</p><h3>${ship.name}</h3>
       <dl><div><dt>Hull</dt><dd>${ship.hull}/${ship.max_hull}</dd></div><div><dt>Shields</dt><dd>F ${ship.shields.front} · A ${ship.shields.aft}</dd></div><div><dt>Energy</dt><dd>${ship.energy - ship.damage.engines}</dd></div></dl><span class="schematic-cue">${target ? target === "legal" ? "Legal target · inspect or fire" : "Inspect firing solution" : selectable ? "Open your schematic ↗" : "Controlled by command AI"}</span></div>
@@ -158,7 +158,7 @@ export function mountMatch(root) {
     const selectable = !state.solo || ship.player === player;
     const moving = state.pending_movement?.[0] === ship.id;
     const target = targetStatus(ship);
-    return `<g class="ship-token fleet-${ship.fleet} ${ship.destroyed ? "destroyed" : ""} ${moving ? "movement-active" : ""} ${target ? `target-candidate ${target}` : selectable ? "selectable" : "ai-opponent"}" ${target ? `data-target-id="${ship.id}" role="button" tabindex="0" aria-label="${ship.name}, ${target} target"` : selectable ? `data-ship-id="${ship.id}" role="button" tabindex="0" aria-label="Open ${ship.name} schematic"` : `aria-label="${ship.name}, AI-controlled opponent"`} transform="translate(${x} ${y}) rotate(${120 - (facing * 60)}) scale(.86)">${shipHull(ship)}</g>`;
+    return `<g class="ship-token fleet-${ship.fleet} ${ship.destroyed ? "destroyed" : ""} ${moving ? "movement-active" : ""} ${target ? `target-candidate ${target}` : selectable ? "selectable" : "ai-opponent"}" data-ship-hover-id="${ship.id}" ${target ? `data-target-id="${ship.id}" role="button" tabindex="0" aria-label="${ship.name}, ${target} target"` : selectable ? `data-ship-id="${ship.id}" role="button" tabindex="0" aria-label="Open ${ship.name} schematic"` : `aria-label="${ship.name}, AI-controlled opponent"`} transform="translate(${x} ${y}) rotate(${120 - (facing * 60)}) scale(.86)"><circle class="ship-hover-area" r="32"/>${shipHull(ship)}</g>`;
   };
   const missileCounter = (missile) => {
     const [q, r, facing] = missile.position; const [x, y] = center(q, r);
@@ -201,6 +201,22 @@ export function mountMatch(root) {
     const speed = Number(ship.allocation.speed); const speedBand = speed <= 4 ? 0 : speed <= 8 ? 1 : 2;
     return ({ small: 0, medium: 1, large: 2 }[ship.size] || 0) + speedBand;
   };
+  const motionReadout = (ship) => {
+    const concealed = state.phase === "allocation" && ship.player !== player;
+    return {
+      concealed,
+      speed: concealed ? "—" : Number(ship.allocation.speed),
+      turnMode: concealed ? "—" : currentTurnMode(ship)
+    };
+  };
+  const motionReadoutMarkup = (ship, compact = false) => {
+    const motion = motionReadout(ship);
+    return `<div class="ship-motion-readout ${compact ? "compact" : ""} ${motion.concealed ? "concealed" : ""}">
+      <div><span>Current speed</span><b>${motion.speed}</b></div><div><span>Turn mode</span><b>${motion.turnMode}</b></div>
+      ${motion.concealed ? `<small>Opponent allocation unannounced</small>` : ""}
+    </div>`;
+  };
+  const shipHoverMarkup = (ship) => `<div class="ship-hover-heading"><span>${fleetName(ship.fleet)} · ${ship.size}</span><b>${ship.name}</b></div>${motionReadoutMarkup(ship)}`;
   const movementDestination = (ship, maneuver) => {
     const direction = maneuver === "sideslip_left" ? (ship.position[2] + 1) % 6 : maneuver === "sideslip_right" ? (ship.position[2] + 5) % 6 : ship.position[2];
     const delta = directions[direction];
@@ -356,14 +372,35 @@ export function mountMatch(root) {
       const top = Math.min(Math.max(gap, pointerY - 22), window.innerHeight - hintHeight - gap);
       hint.style.left = `${Math.max(gap, left)}px`; hint.style.top = `${top}px`;
     };
+    const positionShipHint = (shipControl) => {
+      if (!hint) return;
+      const rect = shipControl.getBoundingClientRect();
+      const hintWidth = hint.offsetWidth || 260; const hintHeight = hint.offsetHeight || 150;
+      const viewportGap = 14; const shipGap = 34;
+      const roomOnRight = rect.right + shipGap + hintWidth <= window.innerWidth - viewportGap;
+      const left = roomOnRight ? rect.right + shipGap : rect.left - hintWidth - shipGap;
+      const centeredTop = rect.top + (rect.height / 2) - (hintHeight / 2);
+      const top = Math.min(Math.max(viewportGap, centeredTop), window.innerHeight - hintHeight - viewportGap);
+      hint.style.left = `${Math.max(viewportGap, left)}px`; hint.style.top = `${top}px`;
+    };
     const showTargetHint = (event, targetControl) => {
       const weapon = ship?.weapons.find((entry) => entry.id === selectedWeaponId);
       const candidate = findTarget(targetControl.dataset.targetId);
       if (!hint || !weapon || !candidate) return;
       const solution = firingSolution(ship, candidate, weapon);
-      hint.innerHTML = `${weaponHint(weapon)}<div class="target-firing-solution ${solution.legal ? "legal" : "illegal"}"><header><span>${solution.missileTarget ? "Intercept · −1 die" : "Target"}</span><b>${targetName(candidate)}</b></header><div><span>Range</span><b>${solution.range}</b><span>Band</span><b>${solution.band || "—"}</b><span>To hit</span><b>${solution.hit || "—"}</b><span>${solution.missileTarget ? "On hit" : "Damage"}</span><b>${solution.damage || "—"}</b></div><strong>${solution.problem}</strong></div>`;
+      const targetMotion = candidate.name ? motionReadoutMarkup(candidate, true) : "";
+      hint.className = `weapon-hover-hint fleet-${ship.fleet}`;
+      hint.innerHTML = `${weaponHint(weapon)}<div class="target-firing-solution ${solution.legal ? "legal" : "illegal"}"><header><span>${solution.missileTarget ? "Intercept · −1 die" : "Target"}</span><b>${targetName(candidate)}</b></header>${targetMotion}<div><span>Range</span><b>${solution.range}</b><span>Band</span><b>${solution.band || "—"}</b><span>To hit</span><b>${solution.hit || "—"}</b><span>${solution.missileTarget ? "On hit" : "Damage"}</span><b>${solution.damage || "—"}</b></div><strong>${solution.problem}</strong></div>`;
       hint.classList.add("visible"); hint.setAttribute("aria-hidden", "false");
       positionWeaponHint(event, targetControl);
+    };
+    const showShipHint = (event, shipControl) => {
+      const candidate = state.ships.find((entry) => entry.id === shipControl.dataset.shipHoverId);
+      if (!hint || !candidate) return;
+      hint.className = `weapon-hover-hint ship-motion-hint fleet-${candidate.fleet} visible`;
+      hint.innerHTML = shipHoverMarkup(candidate);
+      hint.setAttribute("aria-hidden", "false");
+      positionShipHint(shipControl);
     };
     const hideWeaponHint = () => { hint?.classList.remove("visible"); hint?.setAttribute("aria-hidden", "true"); };
     root.querySelectorAll(".weapon-module, .weapon-hardpoint").forEach((weaponControl) => {
@@ -384,6 +421,14 @@ export function mountMatch(root) {
         if (candidate && weapon && directWeaponLegal(ship, candidate, weapon)) request("fire", { ship_id: ship.id, target_id: candidate.id, weapon_id: weapon.id });
       });
       targetControl.addEventListener("keydown", (event) => { if ((event.key === "Enter" || event.key === " ") && targetControl.classList.contains("legal")) { event.preventDefault(); targetControl.click(); } });
+    });
+    root.querySelectorAll("[data-ship-hover-id]:not([data-target-id])").forEach((shipControl) => {
+      shipControl.setAttribute("aria-describedby", "weapon-hover-hint");
+      shipControl.addEventListener("mouseenter", (event) => showShipHint(event, shipControl));
+      shipControl.addEventListener("mousemove", () => positionShipHint(shipControl));
+      shipControl.addEventListener("mouseleave", hideWeaponHint);
+      shipControl.addEventListener("focus", (event) => showShipHint(event, shipControl));
+      shipControl.addEventListener("blur", hideWeaponHint);
     });
   };
   const render = () => {
