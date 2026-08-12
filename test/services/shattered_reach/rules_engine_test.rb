@@ -116,6 +116,7 @@ class ShatteredReach::RulesEngineTest < ActiveSupport::TestCase
     target["position"] = [2, 0, 3]
     attacker["allocation"] = { "speed" => 0, "shields" => 0, "weapons" => [attacker["weapons"].first["id"]] }
     state["phase"] = "impulse"
+    state["impulse"] = 1
     state["seed"] = 3
     before_shield = target["shields"]["front"]
 
@@ -123,5 +124,68 @@ class ShatteredReach::RulesEngineTest < ActiveSupport::TestCase
 
     assert_operator result["ships"].last["shields"]["front"], :<, before_shield
     assert_equal target["hull"], result["ships"].last["hull"]
+  end
+
+  test "a missile launches after movement without immediately damaging its target" do
+    state = ShatteredReach::RulesEngine.start
+    target, attacker = state["ships"]
+    missile_launcher = attacker["weapons"].find { |weapon| weapon["type"] == "missile" }
+    state["phase"] = "impulse"
+    state["impulse"] = 1
+    shields_before = target["shields"].dup
+    launch_position = attacker["position"].dup
+
+    result = ShatteredReach::RulesEngine.apply(state, player: attacker["player"], action: "fire", payload: { "ship_id" => attacker["id"], "target_id" => target["id"], "weapon_id" => missile_launcher["id"] })
+
+    assert_equal shields_before, result["ships"].first["shields"]
+    assert_equal launch_position, result["missiles"].first["position"]
+    assert_equal target["id"], result["missiles"].first["target_id"]
+    assert_match(/launches a seeker missile/, result["log"].last)
+  end
+
+  test "a launched missile moves two hexes on the following impulse" do
+    state = ShatteredReach::RulesEngine.start
+    target, attacker = state["ships"]
+    missile_launcher = attacker["weapons"].find { |weapon| weapon["type"] == "missile" }
+    state["phase"] = "impulse"
+    state["impulse"] = 1
+    state = ShatteredReach::RulesEngine.apply(state, player: attacker["player"], action: "fire", payload: { "ship_id" => attacker["id"], "target_id" => target["id"], "weapon_id" => missile_launcher["id"] })
+    before = state["missiles"].first["position"].dup
+
+    result = ShatteredReach::RulesEngine.apply(state, player: "player_one", action: "advance_impulse")
+
+    assert_equal 2, ShatteredReach::RulesEngine.distance(before, result["missiles"].first["position"])
+  end
+
+  test "a missile impacts for three damage and is removed from the board" do
+    state = ShatteredReach::RulesEngine.start
+    target, attacker = state["ships"]
+    attacker["position"] = [2, 0, 3]
+    target["position"] = [0, 0, 0]
+    missile_launcher = attacker["weapons"].find { |weapon| weapon["type"] == "missile" }
+    state["phase"] = "impulse"
+    state["impulse"] = 1
+    state = ShatteredReach::RulesEngine.apply(state, player: attacker["player"], action: "fire", payload: { "ship_id" => attacker["id"], "target_id" => target["id"], "weapon_id" => missile_launcher["id"] })
+    shields_before = state["ships"].first.dig("shields", "front")
+
+    result = ShatteredReach::RulesEngine.apply(state, player: "player_one", action: "advance_impulse")
+
+    assert_empty result["missiles"]
+    assert_equal shields_before - 3, result["ships"].first.dig("shields", "front")
+    assert_match(/hits .* for 3 damage/, result["log"].last)
+  end
+
+  test "weapons fire once per turn rather than once per impulse" do
+    state = ShatteredReach::RulesEngine.start
+    target, attacker = state["ships"]
+    missile_launcher = attacker["weapons"].find { |weapon| weapon["type"] == "missile" }
+    state["phase"] = "impulse"
+    state["impulse"] = 1
+    state = ShatteredReach::RulesEngine.apply(state, player: attacker["player"], action: "fire", payload: { "ship_id" => attacker["id"], "target_id" => target["id"], "weapon_id" => missile_launcher["id"] })
+    state = ShatteredReach::RulesEngine.apply(state, player: "player_one", action: "advance_impulse")
+
+    assert_raises(ShatteredReach::RulesEngine::IllegalAction) do
+      ShatteredReach::RulesEngine.apply(state, player: attacker["player"], action: "fire", payload: { "ship_id" => attacker["id"], "target_id" => target["id"], "weapon_id" => missile_launcher["id"] })
+    end
   end
 end

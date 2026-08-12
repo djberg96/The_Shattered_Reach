@@ -21,14 +21,15 @@ class MatchesController < ApplicationController
 
   def action
     match = Match.find(params[:id])
-    match.apply!(player: action_params.fetch(:player, "player_one"), action: action_params.fetch(:action), payload: action_params.fetch(:payload, {}).to_h)
+    player = match.game_state["solo"] ? "player_one" : action_params.fetch(:player, "player_one")
+    match.apply!(player: player, action: action_params.fetch(:command), payload: action_params.fetch(:payload, {}).to_h)
     render json: match.game_state
   end
 
   private
 
   def action_params
-    params.permit(:player, :action, payload: {})
+    params.slice(:player, :command, :payload).permit(:player, :command, payload: {})
   end
 
   def illegal_action(error)

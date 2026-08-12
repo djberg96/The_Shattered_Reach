@@ -18,7 +18,8 @@ module ShatteredReach
       {
         "version" => GameDefinition::VERSION, "scenario" => scenario.to_s, "solo" => solo, "board_size" => board_size, "turn" => 1,
         "phase" => "allocation", "impulse" => 0, "seed" => 17, "initiative" => nil,
-        "ships" => ships, "log" => ["Battle stations. Allocate energy in secret."], "winner" => nil,
+        "ships" => ships, "missiles" => [], "next_missile_id" => 1,
+        "log" => ["Battle stations. Allocate energy in secret."], "winner" => nil,
         "tutorial_step" => scenario == :tutorial ? 0 : nil
       }
     end
@@ -57,6 +58,8 @@ module ShatteredReach
         end
       end
       migrate_loadouts!(state) if state["version"] != GameDefinition::VERSION
+      state["missiles"] ||= []
+      state["next_missile_id"] ||= state["missiles"].length + 1
 
       state["ships"].each do |ship|
         spec = GameDefinition::SHIPS[ship["key"]]
@@ -148,28 +151,36 @@ module ShatteredReach
       card = impulse_card(state)
       state["ships"].reject { |ship| ship["destroyed"] }.sort_by { |ship| ship["allocation"]["speed"] }.each do |ship|
         move_forward!(ship) if card.include?(ship["allocation"]["speed"])
-        ship["weapons"].each { |weapon| weapon["fired"] = false }
       end
       state["tutorial_step"] = 2 if state["scenario"] == "tutorial" && state["impulse"] == 1
       log!(state, "Impulse #{state["impulse"]}: speeds #{card.join(", ")} move.")
+      move_missiles!(state)
     end
     private_class_method :advance_impulse!
 
     def self.fire!(state, player, payload)
       require_phase!(state, "impulse")
+      raise IllegalAction, "Draw an impulse card before launching or firing weapons" if state["impulse"].to_i.zero?
       attacker = owned_ship!(state, player, payload.fetch("ship_id"))
       target = state["ships"].find { |ship| ship["id"] == payload.fetch("target_id") && ship["player"] != player && !ship["destroyed"] }
       raise IllegalAction, "No legal target" unless target
       weapon = attacker["weapons"].find { |entry| entry["id"] == payload.fetch("weapon_id") }
       raise IllegalAction, "Weapon unavailable" unless weapon && !weapon["destroyed"] && !weapon["fired"]
+      raise IllegalAction, "Missile launcher is empty" if weapon["type"] == "missile" && weapon["ammo"].to_i <= 0
       raise IllegalAction, "Weapon was not allocated energy" unless weapon["type"] == "missile" || attacker["allocation"]["weapons"].include?(weapon["id"])
+      if weapon["type"] == "missile"
+        launch_missile!(state, attacker, target, weapon)
+        state["tutorial_step"] = 3 if state["scenario"] == "tutorial"
+        return
+      end
+
       range = distance(attacker["position"], target["position"])
       profile = GameDefinition::WEAPONS.fetch(weapon["type"].to_s)
       bracket = profile[:ranges].index { |limit| range <= limit }
       raise IllegalAction, "Target is out of range" unless bracket
       weapon["fired"] = true
       roll = next_roll(state)
-      hit = weapon["type"] == "missile" || roll >= profile[:to_hit][bracket]
+      hit = roll >= profile[:to_hit][bracket]
       if hit
         apply_damage!(state, target, profile[:damage][bracket], attacker)
         log!(state, "#{attacker["name"]} hits #{target["name"]} with #{profile[:label]} (#{roll}).")
@@ -180,6 +191,53 @@ module ShatteredReach
       check_victory!(state)
     end
     private_class_method :fire!
+
+    def self.launch_missile!(state, attacker, target, weapon)
+      missile_id = state["next_missile_id"]
+      state["next_missile_id"] += 1
+      state["missiles"] << {
+        "id" => "missile-#{missile_id}", "owner" => attacker["player"], "fleet" => attacker["fleet"],
+        "launcher_ship_id" => attacker["id"], "target_id" => target["id"], "position" => attacker["position"].dup,
+        "launched_turn" => state["turn"], "launched_impulse" => state["impulse"]
+      }
+      weapon["fired"] = true
+      weapon["ammo"] -= 1
+      log!(state, "#{attacker["name"]} launches a seeker missile at #{target["name"]}.")
+    end
+    private_class_method :launch_missile!
+
+    def self.move_missiles!(state)
+      surviving = []
+      state["missiles"].each do |missile|
+        target = state["ships"].find { |ship| ship["id"] == missile["target_id"] && !ship["destroyed"] }
+        unless target
+          log!(state, "A seeker missile loses its target and burns out.")
+          next
+        end
+
+        impacted = false
+        2.times do
+          direction = DIRECTIONS.each_index.min_by do |index|
+            delta = DIRECTIONS[index]
+            distance([missile["position"][0] + delta[0], missile["position"][1] + delta[1]], target["position"])
+          end
+          delta = DIRECTIONS[direction]
+          missile["position"][0] += delta[0]
+          missile["position"][1] += delta[1]
+          missile["position"][2] = direction
+          next unless missile["position"].first(2) == target["position"].first(2)
+
+          apply_damage!(state, target, 3, nil)
+          log!(state, "Seeker missile hits #{target["name"]} for 3 damage.")
+          check_victory!(state)
+          impacted = true
+          break
+        end
+        surviving << missile unless impacted
+      end
+      state["missiles"] = surviving
+    end
+    private_class_method :move_missiles!
 
     def self.special!(state, player, payload)
       require_phase!(state, "impulse")
@@ -224,7 +282,13 @@ module ShatteredReach
       check_victory!(state)
       return if state["winner"]
       state["turn"] += 1; state["phase"] = "allocation"; state["impulse"] = 0
-      state["ships"].each { |ship| ship["locked"] = false; ship["allocation"] = { "speed" => 0, "shields" => { "front" => 0, "aft" => 0 }, "weapons" => [] } unless ship["destroyed"] }
+      state["ships"].each do |ship|
+        next if ship["destroyed"]
+
+        ship["locked"] = false
+        ship["allocation"] = { "speed" => 0, "shields" => { "front" => 0, "aft" => 0 }, "weapons" => [] }
+        ship["weapons"].each { |weapon| weapon["fired"] = false }
+      end
       log!(state, "Turn #{state["turn"]}. Allocate energy in secret.")
     end
     private_class_method :finish_turn!

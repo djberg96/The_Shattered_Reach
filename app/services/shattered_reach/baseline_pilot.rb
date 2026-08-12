@@ -21,5 +21,27 @@ module ShatteredReach
       end
       { "ship_id" => ship["id"], "speed" => speed, "front_shields" => 0, "aft_shields" => 0, "weapons" => weapons }
     end
+
+    def self.combat_action(state, player)
+      ship = state.fetch("ships").find { |entry| entry["player"] == player && !entry["destroyed"] }
+      target = state.fetch("ships").find { |entry| entry["player"] != player && !entry["destroyed"] }
+      return unless ship && target
+
+      range = RulesEngine.distance(ship["position"], target["position"])
+      weapon = ship["weapons"].find do |candidate|
+        next if candidate["destroyed"] || candidate["fired"]
+        next if candidate["type"] == "missile" && candidate["ammo"].to_i <= 0
+        next unless candidate["type"] == "missile" || ship.dig("allocation", "weapons").include?(candidate["id"])
+
+        GameDefinition::WEAPONS.fetch(candidate["type"])[:ranges].any? { |limit| range <= limit }
+      end
+      if weapon
+        return { action: "fire", payload: { "ship_id" => ship["id"], "target_id" => target["id"], "weapon_id" => weapon["id"] } }
+      end
+
+      return unless ship["special_available"]
+
+      { action: "special", payload: { "ship_id" => ship["id"], "maneuver" => "emergency_power" } }
+    end
   end
 end
