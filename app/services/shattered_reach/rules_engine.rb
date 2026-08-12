@@ -94,6 +94,7 @@ module ShatteredReach
         allocation["shields"]["front"] ||= 0
         allocation["shields"]["aft"] ||= 0
         ship["movement"] ||= { "hexes_since_turn" => 0, "last_action" => nil }
+        ship["movement_path"] = [ship["position"].first(2)] unless ship["movement_path"].is_a?(Array) && ship["movement_path"].any?
       end
       state
     end
@@ -126,7 +127,8 @@ module ShatteredReach
         "shields" => { "front" => spec[:front_shields], "aft" => spec[:aft_shields] }, "max_front_shields" => spec[:front_shields], "max_aft_shields" => spec[:aft_shields],
         "allocation" => { "speed" => 0, "shields" => { "front" => 0, "aft" => 0 }, "weapons" => [] },
         "locked" => false, "special_available" => spec[:size] != "large", "weapons" => spec[:weapons].map.with_index { |w, i| w.stringify_keys.merge("id" => "w#{i}", "destroyed" => false, "fired" => false) },
-        "damage" => { "engines" => 0, "weapons" => 0 }, "movement" => { "hexes_since_turn" => 0, "last_action" => nil }, "destroyed" => false
+        "damage" => { "engines" => 0, "weapons" => 0 }, "movement" => { "hexes_since_turn" => 0, "last_action" => nil },
+        "movement_path" => [position.first(2)], "destroyed" => false
       }
     end
     private_class_method :build_ship
@@ -257,6 +259,7 @@ module ShatteredReach
       delta = DIRECTIONS[direction]
       ship["position"][0] += delta[0]
       ship["position"][1] += delta[1]
+      ship["movement_path"] << ship["position"].first(2)
       ship["movement"]["hexes_since_turn"] = ship.dig("movement", "hexes_since_turn").to_i + 1
       ship["movement"]["last_action"] = sideslip ? "sideslip" : "forward"
       unless on_board?(state, ship["position"])
@@ -533,6 +536,7 @@ module ShatteredReach
         ship["allocation"] = { "speed" => 0, "shields" => { "front" => 0, "aft" => 0 }, "weapons" => [] }
         ship["weapons"].each { |weapon| weapon["fired"] = false }
         ship["movement"] = { "hexes_since_turn" => 0, "last_action" => nil }
+        ship["movement_path"] = [ship["position"].first(2)]
       end
       log!(state, "Turn #{state["turn"]}. Allocate energy in secret.")
     end

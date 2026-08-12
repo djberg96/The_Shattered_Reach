@@ -43,6 +43,48 @@ class ShatteredReach::RulesEngineTest < ActiveSupport::TestCase
     assert_equal 5, ship["max_aft_shields"]
   end
 
+  test "ship movement paths begin at the turn-start hex and record translations" do
+    state = ShatteredReach::RulesEngine.start
+    ship = state["ships"].first
+    origin = ship["position"].first(2)
+    ship["allocation"]["speed"] = 5
+    state["phase"] = "impulse"
+    state["activity_step"] = "movement"
+    state["pending_movement"] = [ship["id"]]
+    state["movement_options"] = ShatteredReach::RulesEngine.legal_movement_actions(state, ship["id"])
+
+    result = ShatteredReach::RulesEngine.apply(state, player: ship["player"], action: "move_ship", payload: { "ship_id" => ship["id"], "maneuver" => "forward" })
+
+    assert_equal [origin, result["ships"].first["position"].first(2)], result["ships"].first["movement_path"]
+  end
+
+  test "turning in place does not add a false movement-path segment" do
+    state = ShatteredReach::RulesEngine.start
+    ship = state["ships"].first
+    ship["allocation"]["speed"] = 1
+    ship["movement"]["hexes_since_turn"] = 1
+    state["phase"] = "impulse"
+    state["activity_step"] = "movement"
+    state["pending_movement"] = [ship["id"]]
+    state["movement_options"] = ShatteredReach::RulesEngine.legal_movement_actions(state, ship["id"])
+
+    result = ShatteredReach::RulesEngine.apply(state, player: ship["player"], action: "move_ship", payload: { "ship_id" => ship["id"], "maneuver" => "turn_left" })
+
+    assert_equal [ship["position"].first(2)], result["ships"].first["movement_path"]
+  end
+
+  test "movement paths reset to each ship's current hex at the start of a new turn" do
+    state = ShatteredReach::RulesEngine.start
+    ship = state["ships"].first
+    ship["position"] = [4, 3, 0]
+    ship["movement_path"] = [[1, 7], [2, 7], [3, 6], [4, 3]]
+
+    ShatteredReach::RulesEngine.send(:finish_turn!, state)
+
+    assert_equal 2, state["turn"]
+    assert_equal [[4, 3]], state["ships"].first["movement_path"]
+  end
+
   test "allocations are limited by engine energy" do
     state = ShatteredReach::RulesEngine.start
     ship = state["ships"].first

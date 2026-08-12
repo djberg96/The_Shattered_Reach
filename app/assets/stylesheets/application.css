@@ -32,6 +32,8 @@ button:hover, .button:hover { transform: translateY(-1px); border-color: rgba(25
 /* Live ship schematics, based on the original physical player mats. */
 .battlefield .ship-token.selectable { cursor:pointer; }.battlefield .ship-token.ai-opponent { cursor:default; }
 .ship-hover-area { fill:transparent; stroke:none; pointer-events:all; }
+.zoom-controls .movement-lines-toggle { min-width:5.4rem; color:#d9e3ff; font-size:.48rem; letter-spacing:.06em; }.zoom-controls .movement-lines-toggle[aria-pressed="false"] { color:var(--quiet); }
+.movement-lines { pointer-events:none; }.movement-line { --trail:var(--gold); }.movement-line.fleet-veyr { --trail:var(--blue); }.movement-line.fleet-kestrel { --trail:var(--copper); }.movement-line polyline { fill:none; stroke:var(--trail); stroke-width:3; stroke-linecap:round; stroke-linejoin:round; stroke-dasharray:8 5; opacity:.72; filter:drop-shadow(0 0 4px color-mix(in srgb,var(--trail) 70%,transparent)); }.movement-origin { fill:#081027; stroke:var(--trail); stroke-width:2.5; filter:drop-shadow(0 0 5px var(--trail)); }.movement-origin-pulse { fill:color-mix(in srgb,var(--trail) 12%,transparent); stroke:color-mix(in srgb,var(--trail) 50%,transparent); stroke-width:1.5; stroke-dasharray:3 3; }.movement-waypoint { fill:var(--trail); stroke:#081027; stroke-width:1.5; }
 .fleet-status-hint { margin:-.7rem 0 .8rem; color:var(--quiet); font-size:.82rem; }
 .ship-card { grid-template-columns:3.6rem 1fr; padding:.9rem .35rem; cursor:pointer; transition:background .15s ease,transform .15s ease; }
 .ship-card:hover,.ship-card:focus-visible { background:rgba(255,255,255,.045); outline:1px solid rgba(255,255,255,.22); transform:translateX(-2px); }

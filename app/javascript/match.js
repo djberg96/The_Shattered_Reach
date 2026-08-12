@@ -11,6 +11,7 @@ export function mountMatch(root) {
   let selectedWeaponId = null;
   let impulseModalOpen = Boolean(state.impulse_card && state.activity_step === "movement");
   let soundEnabled = window.localStorage.getItem("shattered-reach-sound") !== "muted";
+  let movementLinesVisible = window.localStorage.getItem("shattered-reach-movement-lines") !== "hidden";
   let audioContext = null;
   let combatEffectPlaying = false;
   const combatEffectQueue = [];
@@ -152,6 +153,16 @@ export function mountMatch(root) {
       cells.push(`<g class="hex-cell"><polygon points="${polygon(x, y)}"/><text class="hex-reference" x="${x}" y="${y - (hexHeight / 2) + 12}">${reference}</text></g>`);
     }
     return `<g class="hex-grid">${cells.join("")}</g>`;
+  };
+  const movementLines = () => {
+    if (!movementLinesVisible) return "";
+    return `<g class="movement-lines" aria-label="Ship movement paths this turn">${state.ships.map((ship) => {
+      const path = Array.isArray(ship.movement_path) && ship.movement_path.length ? ship.movement_path : [ship.position.slice(0, 2)];
+      const points = path.map((position) => center(...position).join(",")).join(" ");
+      const [startX, startY] = center(...path[0]);
+      const segments = path.length > 1 ? `<polyline points="${points}"/>${path.slice(1, -1).map((position) => { const [x, y] = center(...position); return `<circle class="movement-waypoint" cx="${x}" cy="${y}" r="3"/>`; }).join("")}` : "";
+      return `<g class="movement-line fleet-${ship.fleet}" aria-label="${ship.name} movement path"><circle class="movement-origin-pulse" cx="${startX}" cy="${startY}" r="12"/><circle class="movement-origin" cx="${startX}" cy="${startY}" r="5"/>${segments}</g>`;
+    }).join("")}</g>`;
   };
   const hex = (ship) => {
     const [q, r, facing] = ship.position; const [x, y] = center(q, r);
@@ -297,6 +308,11 @@ export function mountMatch(root) {
       if (soundEnabled) ensureAudio();
       render();
     });
+    root.querySelector(".movement-lines-toggle")?.addEventListener("click", () => {
+      movementLinesVisible = !movementLinesVisible;
+      window.localStorage.setItem("shattered-reach-movement-lines", movementLinesVisible ? "visible" : "hidden");
+      render();
+    });
     const updateEnergyBudget = () => {
       const speed = Number(root.querySelector("#speed")?.value || 0);
       const shields = Number(root.querySelector("#front-shields")?.value || 0) + Number(root.querySelector("#aft-shields")?.value || 0);
@@ -440,7 +456,7 @@ export function mountMatch(root) {
     root.innerHTML = `
       <header class="game-header"><a href="/" class="wordmark">THE <strong>SHATTERED</strong> REACH</a><div class="turn-state"><span>TURN ${state.turn}${state.phase === "impulse" ? ` · IMPULSE ${state.impulse}` : ""}</span><b>${state.winner ? `${state.winner === "player_one" ? "Player One" : "Player Two"} wins` : state.phase === "allocation" ? "Secret allocation" : activityLabel}</b></div>${identity}</header>
       <main class="match-layout"><section class="command-panel"><p class="eyebrow">${state.solo ? `Solo command · Your ship: ${current?.name}` : state.scenario === "tutorial" ? `Tutorial · ${["Set the battle plan", "Reveal allocations", "Choose a maneuver", "Fire your first weapon"][state.tutorial_step] || "Continue the engagement"}` : "Fleet command"}</p><h1>${commandTitle}</h1><p class="quiet">${state.log.at(-1)}</p>${current ? controls(current, target) : ""}</section>
-      <section class="battlefield"><div class="nebula"></div><div class="zoom-controls" aria-label="Battlefield controls"><button class="sound-toggle" aria-label="${soundEnabled ? "Mute" : "Enable"} weapon sounds" aria-pressed="${soundEnabled}">${soundEnabled ? "SOUND ON" : "MUTED"}</button><button class="zoom-out" aria-label="Zoom out">−</button><button class="zoom-reset" aria-label="Reset zoom">${Math.round(zoom * 100)}%</button><button class="zoom-in" aria-label="Zoom in">+</button></div><svg viewBox="0 0 ${boardWidth} ${boardHeight}" aria-label="${boardSize} by ${boardSize} tactical flat-top hex battlefield" style="width:${zoom * 100}%;max-width:none">${grid()}${movementChoices()}${state.ships.map(hex).join("")}${(state.missiles || []).map(missileCounter).join("")}</svg><div class="battlefield-label">Tactical display · ${boardSize} × ${boardSize} · numbered flat-top hex grid</div></section>
+      <section class="battlefield"><div class="nebula"></div><div class="zoom-controls" aria-label="Battlefield controls"><button class="movement-lines-toggle" aria-label="${movementLinesVisible ? "Hide" : "Show"} movement paths" aria-pressed="${movementLinesVisible}">${movementLinesVisible ? "TRAILS ON" : "TRAILS OFF"}</button><button class="sound-toggle" aria-label="${soundEnabled ? "Mute" : "Enable"} weapon sounds" aria-pressed="${soundEnabled}">${soundEnabled ? "SOUND ON" : "MUTED"}</button><button class="zoom-out" aria-label="Zoom out">−</button><button class="zoom-reset" aria-label="Reset zoom">${Math.round(zoom * 100)}%</button><button class="zoom-in" aria-label="Zoom in">+</button></div><svg viewBox="0 0 ${boardWidth} ${boardHeight}" aria-label="${boardSize} by ${boardSize} tactical flat-top hex battlefield" style="width:${zoom * 100}%;max-width:none">${grid()}${movementLines()}${movementChoices()}${state.ships.map(hex).join("")}${(state.missiles || []).map(missileCounter).join("")}</svg><div class="battlefield-label">Tactical display · ${boardSize} × ${boardSize} · numbered flat-top hex grid</div></section>
       <aside class="fleet-status"><h2>Fleet status</h2><p class="fleet-status-hint">${state.solo ? "Your ship is selectable; the opposing ship is controlled by the AI." : "Select a ship for its combat schematic."}</p>${state.ships.map(shipCard).join("")}</aside></main>${selectedShip ? shipSchematic(selectedShip, state, player) : ""}${impulseModal()}<aside id="weapon-hover-hint" class="weapon-hover-hint fleet-${current?.fleet || "aurelian"}" role="tooltip" aria-hidden="true"></aside>`;
     bind(current, target);
   };
