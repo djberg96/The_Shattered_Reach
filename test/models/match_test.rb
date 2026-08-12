@@ -22,7 +22,9 @@ class MatchTest < ActiveSupport::TestCase
     ammo_before = ai_missile["ammo"]
 
     match.apply!(player: "player_one", action: "advance_impulse", payload: {})
-    match.apply!(player: "player_one", action: "move_ship", payload: { "ship_id" => ship["id"], "maneuver" => "forward" })
+    if match.state["activity_step"] == "movement"
+      match.apply!(player: "player_one", action: "move_ship", payload: { "ship_id" => ship["id"], "maneuver" => "forward" })
+    end
 
     ai_missile = match.state["ships"].last["weapons"].find { |weapon| weapon["type"] == "missile" }
     assert_equal ammo_before - 1, ai_missile["ammo"]

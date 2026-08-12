@@ -90,18 +90,41 @@ class ShatteredReach::RulesEngineTest < ActiveSupport::TestCase
   test "both locked allocations begin the impulse phase" do
     state = ShatteredReach::RulesEngine.start
     state["ships"].each do |ship|
-      state = ShatteredReach::RulesEngine.apply(state, player: ship["player"], action: "allocate", payload: { "ship_id" => ship["id"], "speed" => 1, "shields" => 0 })
+      state = ShatteredReach::RulesEngine.apply(state, player: ship["player"], action: "allocate", payload: { "ship_id" => ship["id"], "speed" => 10, "shields" => 0 })
       state = ShatteredReach::RulesEngine.apply(state, player: ship["player"], action: "lock_allocation", payload: {})
     end
 
     assert_equal "impulse", state["phase"]
     assert_includes %w[player_one player_two], state["initiative"]
+    assert_equal 3, state["impulse_order"].length
+    state["impulse_order"].each { |phase| assert_equal [0, 1, 2, 3], phase.sort }
+  end
+
+  test "each phase draws all four original impulse cards without replacement" do
+    state = ShatteredReach::RulesEngine.start
+    state["ships"].each do |ship|
+      state = ShatteredReach::RulesEngine.apply(state, player: ship["player"], action: "allocate", payload: { "ship_id" => ship["id"], "speed" => 0, "weapons" => [] })
+      state = ShatteredReach::RulesEngine.apply(state, player: ship["player"], action: "lock_allocation")
+    end
+
+    drawn = []
+    12.times do
+      state = ShatteredReach::RulesEngine.apply(state, player: "player_one", action: "advance_impulse")
+      drawn << [state["impulse_phase"], state["impulse_card_number"], state["impulse_card"]]
+      state = ShatteredReach::RulesEngine.apply(state, player: "player_one", action: "finish_launches")
+      state = ShatteredReach::RulesEngine.apply(state, player: "player_one", action: "finish_impulse")
+    end
+
+    drawn.each_slice(4).with_index do |phase_draws, phase_index|
+      assert_equal [1, 2, 3, 4].map { |card| (phase_index * 4) + card }, phase_draws.map { |draw| draw[1] }.sort
+      assert_equal ShatteredReach::GameDefinition::IMPULSE_DECKS[phase_index].sort, phase_draws.map { |draw| draw[2] }.sort
+    end
   end
 
   test "an impulse offers legal movement to ships whose speed appears on its card" do
     state = ShatteredReach::RulesEngine.start
     state["ships"].each do |ship|
-      state = ShatteredReach::RulesEngine.apply(state, player: ship["player"], action: "allocate", payload: { "ship_id" => ship["id"], "speed" => 1, "shields" => 0 })
+      state = ShatteredReach::RulesEngine.apply(state, player: ship["player"], action: "allocate", payload: { "ship_id" => ship["id"], "speed" => 10, "shields" => 0 })
       state = ShatteredReach::RulesEngine.apply(state, player: ship["player"], action: "lock_allocation", payload: {})
     end
     before = state["ships"].first["position"].dup
@@ -126,6 +149,7 @@ class ShatteredReach::RulesEngineTest < ActiveSupport::TestCase
     state["phase"] = "impulse"
     state["impulse"] = 1
     state["activity_step"] = "fire"
+    state["impulse_order"] = Array.new(3) { [0, 1, 2, 3] }
     state["seed"] = 3
     before_shield = target["shields"]["front"]
 
@@ -209,7 +233,7 @@ class ShatteredReach::RulesEngineTest < ActiveSupport::TestCase
   test "movement must resolve before launches and direct fire" do
     state = ShatteredReach::RulesEngine.start
     state["ships"].each do |ship|
-      state = ShatteredReach::RulesEngine.apply(state, player: ship["player"], action: "allocate", payload: { "ship_id" => ship["id"], "speed" => 1, "weapons" => [] })
+      state = ShatteredReach::RulesEngine.apply(state, player: ship["player"], action: "allocate", payload: { "ship_id" => ship["id"], "speed" => 10, "weapons" => [] })
       state = ShatteredReach::RulesEngine.apply(state, player: ship["player"], action: "lock_allocation")
     end
     state = ShatteredReach::RulesEngine.apply(state, player: "player_one", action: "advance_impulse")

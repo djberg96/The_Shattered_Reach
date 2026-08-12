@@ -18,7 +18,8 @@ module ShatteredReach
       {
         "version" => GameDefinition::VERSION, "scenario" => scenario.to_s, "solo" => solo, "board_size" => board_size, "turn" => 1,
         "phase" => "allocation", "impulse" => 0, "seed" => 17, "initiative" => nil,
-        "activity_step" => "allocation", "impulse_card" => nil, "pending_movement" => [], "movement_options" => [],
+        "activity_step" => "allocation", "impulse_card" => nil, "impulse_phase" => nil, "impulse_card_number" => nil,
+        "impulse_order" => nil, "pending_movement" => [], "movement_options" => [],
         "ships" => ships, "missiles" => [], "next_missile_id" => 1,
         "log" => ["Battle stations. Allocate energy in secret."], "winner" => nil,
         "tutorial_step" => scenario == :tutorial ? 0 : nil
@@ -67,6 +68,11 @@ module ShatteredReach
       state["next_missile_id"] ||= state["missiles"].length + 1
       state["activity_step"] ||= state["phase"] == "allocation" ? "allocation" : "fire"
       state["impulse_card"] ||= nil
+      state["impulse_phase"] ||= nil
+      state["impulse_card_number"] ||= nil
+      if state["impulse_order"].nil? && state["phase"] == "impulse"
+        state["impulse_order"] = Array.new(3) { shuffled_card_indices(state) }
+      end
       state["pending_movement"] ||= []
       state["movement_options"] ||= []
 
@@ -147,6 +153,7 @@ module ShatteredReach
       state["initiative"] = next_roll(state) >= next_roll(state) ? "player_one" : "player_two"
       state["phase"] = "impulse"
       state["activity_step"] = "draw"
+      state["impulse_order"] = Array.new(3) { shuffled_card_indices(state) }
       state["tutorial_step"] = 1 if state["scenario"] == "tutorial"
       log!(state, "Initiative: #{label(state["initiative"])}. Draw the first impulse.")
     end
@@ -156,8 +163,13 @@ module ShatteredReach
       require_phase!(state, "impulse")
       require_activity_step!(state, "draw")
       state["impulse"] += 1
-      card = impulse_card(state)
+      phase = (state["impulse"] - 1) / 4
+      draw = (state["impulse"] - 1) % 4
+      card_index = state.fetch("impulse_order")[phase][draw]
+      card = GameDefinition::IMPULSE_DECKS[phase][card_index]
       state["impulse_card"] = card
+      state["impulse_phase"] = phase + 1
+      state["impulse_card_number"] = (phase * 4) + card_index + 1
       movers = state["ships"].reject { |ship| ship["destroyed"] || !card.include?(ship.dig("allocation", "speed")) }
       state["pending_movement"] = movers.sort_by do |ship|
         initiative_order = ship["player"] == state["initiative"] ? 0 : 1
@@ -435,6 +447,8 @@ module ShatteredReach
       else
         state["activity_step"] = "draw"
         state["impulse_card"] = nil
+        state["impulse_phase"] = nil
+        state["impulse_card_number"] = nil
         log!(state, "Impulse #{state["impulse"]} complete. Draw the next movement card.")
       end
     end
@@ -467,7 +481,8 @@ module ShatteredReach
       check_victory!(state)
       return if state["winner"]
       state["turn"] += 1; state["phase"] = "allocation"; state["impulse"] = 0
-      state["activity_step"] = "allocation"; state["impulse_card"] = nil; state["pending_movement"] = []; state["movement_options"] = []
+      state["activity_step"] = "allocation"; state["impulse_card"] = nil; state["impulse_phase"] = nil; state["impulse_card_number"] = nil
+      state["impulse_order"] = nil; state["pending_movement"] = []; state["movement_options"] = []
       state["ships"].each do |ship|
         next if ship["destroyed"]
 
@@ -480,11 +495,15 @@ module ShatteredReach
     end
     private_class_method :finish_turn!
 
-    def self.impulse_card(state)
-      phase = (state["impulse"] - 1) / 4
-      GameDefinition::IMPULSE_DECKS[phase][(state["turn"] - 1) % 4]
+    def self.shuffled_card_indices(state)
+      indices = [0, 1, 2, 3]
+      3.downto(1) do |index|
+        swap = (next_roll(state) - 1) % (index + 1)
+        indices[index], indices[swap] = indices[swap], indices[index]
+      end
+      indices
     end
-    private_class_method :impulse_card
+    private_class_method :shuffled_card_indices
     def self.distance(a, b)
       ((a[0] - b[0]).abs + (a[1] - b[1]).abs + ((a[0] + a[1]) - (b[0] + b[1])).abs) / 2
     end

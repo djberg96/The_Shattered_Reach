@@ -8,6 +8,7 @@ export function mountMatch(root) {
   let player = "player_one";
   let zoom = 1;
   let selectedShipId = null;
+  let impulseModalOpen = Boolean(state.impulse_card && state.activity_step === "movement");
   const directions = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]];
 
   const request = async (action, payload = {}) => {
@@ -18,7 +19,9 @@ export function mountMatch(root) {
     });
     const result = await response.json();
     if (!response.ok) { window.alert(result.error); return false; }
-    state = result; render(); return true;
+    state = result;
+    if (action === "advance_impulse") impulseModalOpen = true;
+    render(); return true;
   };
 
   const enemy = () => state.ships.find((ship) => ship.player !== player && !ship.destroyed);
@@ -93,6 +96,16 @@ export function mountMatch(root) {
     const order = { movement: 0, launch: 1, fire: 2 };
     return `<div class="activity-strip">${steps.map(([step, label]) => `<span class="${state.activity_step === step ? "current" : order[state.activity_step] > order[step] ? "done" : ""}">${label}</span>`).join("")}</div>`;
   };
+  const impulseModal = () => {
+    if (!impulseModalOpen || !state.impulse_card) return "";
+    return `<div class="impulse-modal-backdrop" role="presentation"><section class="impulse-modal" role="dialog" aria-modal="true" aria-labelledby="impulse-modal-title">
+      <p class="eyebrow">Impulse ${state.impulse} · Original card #${state.impulse_card_number}</p>
+      <h2 id="impulse-modal-title">Phase ${state.impulse_phase}<br><span>Movement</span></h2>
+      <p class="impulse-modal-label">Speeds that move</p>
+      <div class="impulse-speeds">${state.impulse_card.map((speed) => `<strong>${speed}</strong>`).join("")}</div>
+      <button class="primary dismiss-impulse">${state.activity_step === "movement" ? "Continue to movement" : "Continue to missile launch"}</button>
+    </section></div>`;
+  };
   const movementChoices = () => {
     if (state.activity_step !== "movement") return "";
     const movingShip = state.ships.find((ship) => ship.id === state.pending_movement?.[0]);
@@ -151,6 +164,7 @@ export function mountMatch(root) {
     root.querySelector(".save-allocation")?.addEventListener("click", () => request("allocate", allocationPayload()));
     root.querySelector(".commit-allocation")?.addEventListener("click", async () => { if (await request("allocate", allocationPayload())) await request("lock_allocation"); });
     root.querySelector(".advance")?.addEventListener("click", () => request("advance_impulse"));
+    root.querySelector(".dismiss-impulse")?.addEventListener("click", () => { impulseModalOpen = false; render(); });
     root.querySelectorAll(".move-ship, .movement-choice").forEach((button) => button.addEventListener("click", () => request("move_ship", { ship_id: state.pending_movement[0], maneuver: button.dataset.maneuver })));
     root.querySelectorAll(".movement-choice").forEach((button) => button.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); request("move_ship", { ship_id: state.pending_movement[0], maneuver: button.dataset.maneuver }); } }));
     root.querySelectorAll(".launch-missile").forEach((button) => button.addEventListener("click", () => request("launch_missile", { ship_id: ship.id, target_id: target.id, weapon_id: button.dataset.weapon })));
@@ -174,6 +188,7 @@ export function mountMatch(root) {
     root.querySelector(".schematic-backdrop")?.addEventListener("click", (event) => {
       if (event.target === event.currentTarget) { selectedShipId = null; render(); }
     });
+    root.querySelector(".impulse-modal-backdrop")?.addEventListener("click", (event) => { if (event.target === event.currentTarget) { impulseModalOpen = false; render(); } });
     root.querySelector(".ship-schematic")?.addEventListener("keydown", (event) => {
       if (event.key === "Escape") { selectedShipId = null; render(); }
     });
@@ -211,7 +226,7 @@ export function mountMatch(root) {
       <header class="game-header"><a href="/" class="wordmark">THE <strong>SHATTERED</strong> REACH</a><div class="turn-state"><span>TURN ${state.turn}${state.phase === "impulse" ? ` · IMPULSE ${state.impulse}` : ""}</span><b>${state.winner ? `${state.winner === "player_one" ? "Player One" : "Player Two"} wins` : state.phase === "allocation" ? "Secret allocation" : activityLabel}</b></div>${identity}</header>
       <main class="match-layout"><section class="command-panel"><p class="eyebrow">${state.solo ? `Solo command · Your ship: ${current?.name}` : state.scenario === "tutorial" ? `Tutorial · ${["Set the battle plan", "Reveal allocations", "Choose a maneuver", "Fire your first weapon"][state.tutorial_step] || "Continue the engagement"}` : "Fleet command"}</p><h1>${commandTitle}</h1><p class="quiet">${state.log.at(-1)}</p>${current ? controls(current, target) : ""}</section>
       <section class="battlefield"><div class="nebula"></div><div class="zoom-controls" aria-label="Battlefield zoom"><button class="zoom-out" aria-label="Zoom out">−</button><button class="zoom-reset" aria-label="Reset zoom">${Math.round(zoom * 100)}%</button><button class="zoom-in" aria-label="Zoom in">+</button></div><svg viewBox="0 0 ${boardWidth} ${boardHeight}" aria-label="${boardSize} by ${boardSize} tactical flat-top hex battlefield" style="width:${zoom * 100}%;max-width:none">${grid()}${movementChoices()}${state.ships.map(hex).join("")}${(state.missiles || []).map(missileCounter).join("")}</svg><div class="battlefield-label">Tactical display · ${boardSize} × ${boardSize} · numbered flat-top hex grid</div></section>
-      <aside class="fleet-status"><h2>Fleet status</h2><p class="fleet-status-hint">${state.solo ? "Your ship is selectable; the opposing ship is controlled by the AI." : "Select a ship for its combat schematic."}</p>${state.ships.map(shipCard).join("")}</aside></main>${selectedShip ? shipSchematic(selectedShip, state, player) : ""}`;
+      <aside class="fleet-status"><h2>Fleet status</h2><p class="fleet-status-hint">${state.solo ? "Your ship is selectable; the opposing ship is controlled by the AI." : "Select a ship for its combat schematic."}</p>${state.ships.map(shipCard).join("")}</aside></main>${selectedShip ? shipSchematic(selectedShip, state, player) : ""}${impulseModal()}`;
     bind(current, target);
   };
   render();

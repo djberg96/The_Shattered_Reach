@@ -3,6 +3,16 @@
 require "test_helper"
 
 class ShatteredReach::GameDefinitionTest < ActiveSupport::TestCase
+  ORIGINAL_IMPULSE_CARDS = [
+    [[5, 7, 9, 10, 11, 12], [2, 6, 8, 10, 12], [4, 6, 8, 9, 11, 12], [3, 7, 9, 10, 11, 12]],
+    [[3, 5, 7, 9, 10, 11, 12], [4, 6, 8, 9, 10, 11, 12], [4, 6, 7, 8, 9, 10, 12], [1, 5, 7, 8, 10, 11, 12]],
+    [[4, 6, 8, 10, 11, 12], [3, 6, 8, 9, 10, 11, 12], [2, 5, 7, 9, 11, 12], [5, 7, 8, 9, 10, 11, 12]]
+  ].freeze
+
+  test "impulse data exactly matches the twelve original card images" do
+    assert_equal ORIGINAL_IMPULSE_CARDS, ShatteredReach::GameDefinition::IMPULSE_DECKS
+  end
+
   EXPECTED_LOADOUTS = {
     "aurelian_frigate" => { beam: 4, driver: 1, missile: 0 },
     "aurelian_cruiser" => { beam: 4, driver: 2, missile: 0 },
