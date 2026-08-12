@@ -86,6 +86,18 @@ const weaponState = (weapon, ship, hidden) => {
 
 const weaponAbbreviation = (weapon) => weapon.mount || ({ beam: "LB", driver: "MD", missile: "M" })[weapon.type];
 
+export const weaponHint = (weapon) => {
+  const profile = WEAPONS[weapon.type];
+  const resource = weapon.type === "missile" ? `${weapon.ammo ?? 0} rounds` : `${profile.energy} energy`;
+  if (weapon.type === "missile") {
+    return `<div class="weapon-hint-heading"><span><i>${weaponAbbreviation(weapon)}</i></span><div><b>${profile.label}</b><small>Arc ${weapon.arc.join("/")} · ${resource}</small></div></div>
+      <div class="weapon-hint-contact"><span>Speed</span><b>24 · 2 hexes / impulse</b><span>Contact</span><b>3 damage</b></div>`;
+  }
+  const bands = [["S", profile.short, profile.hit[0], profile.damage[0]], ["M", profile.medium, profile.hit[1], profile.damage[1]], ["L", profile.long, profile.hit[2], profile.damage[2]]];
+  return `<div class="weapon-hint-heading"><span><i>${weaponAbbreviation(weapon)}</i></span><div><b>${profile.label}</b><small>Arc ${weapon.arc.join("/")} · ${resource}</small></div></div>
+    <div class="weapon-hint-matrix"><span>Band</span><span>Range</span><span>Hit</span><span>Dmg</span>${bands.map(([band, range, hit, damage]) => `<b>${band}</b><i>${range}</i><i>${hit}</i><i>${damage}</i>`).join("")}</div>`;
+};
+
 const weaponHardpoints = (ship, hidden) => {
   const mounts = HARDPOINTS[ship.key] || [];
   const selectedId = (ship.weapons.find((weapon) => !weapon.destroyed) || ship.weapons[0])?.id;
