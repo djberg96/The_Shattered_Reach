@@ -102,7 +102,7 @@ export function mountMatch(root) {
       <p class="eyebrow">Impulse ${state.impulse} · Original card #${state.impulse_card_number}</p>
       <h2 id="impulse-modal-title">Phase ${state.impulse_phase}<br><span>Movement</span></h2>
       <p class="impulse-modal-label">Speeds that move</p>
-      <div class="impulse-speeds">${state.impulse_card.map((speed) => `<strong>${speed}</strong>`).join("")}</div>
+      <div class="impulse-speeds speed-count-${state.impulse_card.length}">${state.impulse_card.map((speed) => `<strong>${speed}</strong>`).join("")}</div>
       <button class="primary dismiss-impulse">${state.activity_step === "movement" ? "Continue to movement" : "Continue to missile launch"}</button>
     </section></div>`;
   };
