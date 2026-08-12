@@ -4,6 +4,8 @@ module ShatteredReach
   class RulesEngine
     BOARD_SIZES = [12, 15, 20].freeze
     DIRECTIONS = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]].freeze
+    # A -1 die-roll penalty is equivalent to increasing the required result by 1.
+    MISSILE_TARGET_TO_HIT_PENALTY = 1
 
     class IllegalAction < StandardError; end
 
@@ -324,7 +326,13 @@ module ShatteredReach
       require_phase!(state, "impulse")
       require_activity_step!(state, "fire")
       attacker = owned_ship!(state, player, payload.fetch("ship_id"))
-      target = state["ships"].find { |ship| ship["id"] == payload.fetch("target_id") && ship["player"] != player && !ship["destroyed"] }
+      target_id = payload.fetch("target_id")
+      target = state["ships"].find { |ship| ship["id"] == target_id && ship["player"] != player && !ship["destroyed"] }
+      target_type = :ship
+      unless target
+        target = state["missiles"].find { |missile| missile["id"] == target_id && missile["owner"] != player }
+        target_type = :missile
+      end
       raise IllegalAction, "No legal target" unless target
       weapon = attacker["weapons"].find { |entry| entry["id"] == payload.fetch("weapon_id") }
       raise IllegalAction, "Weapon unavailable" unless weapon && !weapon["destroyed"] && !weapon["fired"]
@@ -338,12 +346,20 @@ module ShatteredReach
       raise IllegalAction, "Target is outside this weapon's firing arc" unless target_in_arc?(attacker, target, weapon["arc"])
       weapon["fired"] = true
       roll = next_roll(state)
-      hit = roll >= profile[:to_hit][bracket]
+      to_hit = profile[:to_hit][bracket]
+      to_hit += MISSILE_TARGET_TO_HIT_PENALTY if target_type == :missile
+      hit = roll >= to_hit
       if hit
-        apply_damage!(state, target, profile[:damage][bracket], attacker)
-        log!(state, "#{attacker["name"]} hits #{target["name"]} with #{profile[:label]} (#{roll}).")
+        if target_type == :missile
+          state["missiles"].delete_if { |missile| missile["id"] == target["id"] }
+          log!(state, "#{attacker["name"]} destroys a seeker missile with #{profile[:label]} (#{roll}).")
+        else
+          apply_damage!(state, target, profile[:damage][bracket], attacker)
+          log!(state, "#{attacker["name"]} hits #{target["name"]} with #{profile[:label]} (#{roll}).")
+        end
       else
-        log!(state, "#{attacker["name"]} misses #{target["name"]} (#{roll}).")
+        target_name = target_type == :missile ? "a seeker missile" : target["name"]
+        log!(state, "#{attacker["name"]} misses #{target_name} (#{roll}).")
       end
       state["tutorial_step"] = 3 if state["scenario"] == "tutorial"
       check_victory!(state)

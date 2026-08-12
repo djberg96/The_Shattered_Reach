@@ -193,6 +193,65 @@ class ShatteredReach::RulesEngineTest < ActiveSupport::TestCase
     assert_equal 2, ShatteredReach::RulesEngine.distance(before, result["missiles"].first["position"])
   end
 
+  test "a direct weapon can target and destroy an enemy missile" do
+    state = ShatteredReach::RulesEngine.start
+    attacker = state["ships"].first
+    weapon = attacker["weapons"].find { |entry| entry["type"] == "driver" && entry["arc"] == ["F"] }
+    attacker["position"] = [0, 0, 0]
+    attacker["allocation"]["weapons"] = [weapon["id"]]
+    state["phase"] = "impulse"
+    state["impulse"] = 1
+    state["activity_step"] = "fire"
+    state["impulse_order"] = Array.new(3) { [0, 1, 2, 3] }
+    state["seed"] = 4
+    state["missiles"] = [{
+      "id" => "missile-1", "owner" => "player_two", "fleet" => "kestrel",
+      "launcher_ship_id" => state["ships"].last["id"], "target_id" => attacker["id"],
+      "position" => [2, 0, 3], "launched_turn" => 1, "launched_impulse" => 1
+    }]
+
+    result = ShatteredReach::RulesEngine.apply(state, player: "player_one", action: "fire", payload: { "ship_id" => attacker["id"], "target_id" => "missile-1", "weapon_id" => weapon["id"] })
+
+    assert_empty result["missiles"]
+    assert result["ships"].all? { |ship| ship["hull"] == ship["max_hull"] }
+    assert_match(/destroys a seeker missile/, result["log"].last)
+  end
+
+  test "the minus one missile penalty makes a normal hit miss" do
+    state = ShatteredReach::RulesEngine.start
+    attacker = state["ships"].first
+    weapon = attacker["weapons"].find { |entry| entry["type"] == "driver" && entry["arc"] == ["F"] }
+    attacker["position"] = [0, 0, 0]
+    attacker["allocation"]["weapons"] = [weapon["id"]]
+    state["phase"] = "impulse"
+    state["impulse"] = 1
+    state["activity_step"] = "fire"
+    state["impulse_order"] = Array.new(3) { [0, 1, 2, 3] }
+    state["seed"] = 5
+    state["missiles"] = [{ "id" => "missile-1", "owner" => "player_two", "fleet" => "kestrel", "target_id" => attacker["id"], "position" => [2, 0, 3] }]
+
+    result = ShatteredReach::RulesEngine.apply(state, player: "player_one", action: "fire", payload: { "ship_id" => attacker["id"], "target_id" => "missile-1", "weapon_id" => weapon["id"] })
+
+    assert_equal ["missile-1"], result["missiles"].map { |missile| missile["id"] }
+    assert_match(/misses a seeker missile \(3\)/, result["log"].last)
+  end
+
+  test "a ship cannot fire on its own missile" do
+    state = ShatteredReach::RulesEngine.start
+    attacker = state["ships"].first
+    weapon = attacker["weapons"].find { |entry| entry["type"] == "driver" && entry["arc"] == ["F"] }
+    attacker["allocation"]["weapons"] = [weapon["id"]]
+    state["phase"] = "impulse"
+    state["activity_step"] = "fire"
+    state["missiles"] = [{ "id" => "missile-1", "owner" => "player_one", "fleet" => "aurelian", "target_id" => state["ships"].last["id"], "position" => [2, 0, 0] }]
+
+    error = assert_raises(ShatteredReach::RulesEngine::IllegalAction) do
+      ShatteredReach::RulesEngine.apply(state, player: "player_one", action: "fire", payload: { "ship_id" => attacker["id"], "target_id" => "missile-1", "weapon_id" => weapon["id"] })
+    end
+
+    assert_match(/No legal target/, error.message)
+  end
+
   test "a missile impacts for three damage and is removed from the board" do
     state = ShatteredReach::RulesEngine.start
     target, attacker = state["ships"]

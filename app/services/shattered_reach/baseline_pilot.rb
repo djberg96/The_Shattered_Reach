@@ -24,18 +24,29 @@ module ShatteredReach
 
     def self.combat_action(state, player)
       ship = state.fetch("ships").find { |entry| entry["player"] == player && !entry["destroyed"] }
-      target = state.fetch("ships").find { |entry| entry["player"] != player && !entry["destroyed"] }
-      return unless ship && target
+      ship_target = state.fetch("ships").find { |entry| entry["player"] != player && !entry["destroyed"] }
+      return unless ship && ship_target
 
-      range = RulesEngine.distance(ship["position"], target["position"])
-      weapon = ship["weapons"].find do |candidate|
+      weapons = ship["weapons"].select do |candidate|
         next if candidate["destroyed"] || candidate["fired"] || candidate["type"] == "missile"
         next unless ship.dig("allocation", "weapons").include?(candidate["id"])
 
-        GameDefinition::WEAPONS.fetch(candidate["type"])[:ranges].any? { |limit| range <= limit } &&
-          RulesEngine.send(:target_in_arc?, ship, target, candidate["arc"])
+        true
       end
-      if weapon
+
+      targets = state.fetch("missiles").select { |missile| missile["owner"] != player }.sort_by do |missile|
+        RulesEngine.distance(ship["position"], missile["position"])
+      end
+      targets << ship_target
+
+      targets.each do |target|
+        range = RulesEngine.distance(ship["position"], target["position"])
+        weapon = weapons.find do |candidate|
+          GameDefinition::WEAPONS.fetch(candidate["type"])[:ranges].any? { |limit| range <= limit } &&
+            RulesEngine.send(:target_in_arc?, ship, target, candidate["arc"])
+        end
+        next unless weapon
+
         return { action: "fire", payload: { "ship_id" => ship["id"], "target_id" => target["id"], "weapon_id" => weapon["id"] } }
       end
 

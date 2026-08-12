@@ -29,10 +29,13 @@ export function mountMatch(root) {
   const enemies = () => state.ships.filter((ship) => ship.player !== player && !ship.destroyed);
   const enemy = () => enemies()[0];
   const mine = () => state.ships.find((ship) => ship.player === player && !ship.destroyed);
-  const targetStatus = (ship) => {
+  const targetOwner = (target) => target.player || target.owner;
+  const targetName = (target) => target.name || "Seeker missile";
+  const findTarget = (targetId) => state.ships.find((entry) => entry.id === targetId) || (state.missiles || []).find((entry) => entry.id === targetId);
+  const targetStatus = (target) => {
     const attacker = mine(); const weapon = attacker?.weapons.find((entry) => entry.id === selectedWeaponId);
-    if (!weapon || state.activity_step !== "fire" || ship.player === player || ship.destroyed) return null;
-    return directWeaponLegal(attacker, ship, weapon) ? "legal" : "illegal";
+    if (!weapon || state.activity_step !== "fire" || targetOwner(target) === player || target.destroyed) return null;
+    return directWeaponLegal(attacker, target, weapon) ? "legal" : "illegal";
   };
   const shipCard = (ship) => { const selectable = !state.solo || ship.player === player; const target = targetStatus(ship); const relationship = state.solo ? ship.player === player ? "Your ship" : "AI opponent" : ship.player === "player_one" ? "Player One" : "Player Two"; return `
     <article class="ship-card fleet-${ship.fleet} ${ship.destroyed ? "destroyed" : ""} ${target ? `target-candidate ${target}` : selectable ? "selectable" : "readonly ai-opponent"}" ${target ? `data-target-id="${ship.id}" role="button" tabindex="0" aria-label="${ship.name}, ${target} target"` : selectable ? `data-ship-id="${ship.id}" role="button" tabindex="0" aria-label="Open ${ship.name} schematic"` : `aria-label="${ship.name}, AI-controlled opponent"`}>
@@ -71,8 +74,11 @@ export function mountMatch(root) {
   };
   const missileCounter = (missile) => {
     const [q, r, facing] = missile.position; const [x, y] = center(q, r);
-    return `<g class="missile-counter fleet-${missile.fleet}" transform="translate(${x} ${y}) rotate(${120 - (facing * 60)})" aria-label="Seeker missile">
-      <circle class="missile-pulse" r="16"/><path class="missile-wake" d="M-5 10 L0 22 L5 10"/>
+    const target = targetStatus(missile);
+    const targetShip = state.ships.find((ship) => ship.id === missile.target_id);
+    const label = `Seeker missile${targetShip ? ` targeting ${targetShip.name}` : ""}`;
+    return `<g class="missile-counter fleet-${missile.fleet} ${target ? `target-candidate ${target}` : ""}" ${target ? `data-target-id="${missile.id}" role="button" tabindex="0" aria-label="${label}, ${target} target"` : `aria-label="${label}"`} transform="translate(${x} ${y}) rotate(${120 - (facing * 60)})">
+      <circle class="missile-target-area" r="24"/><circle class="missile-pulse" r="16"/><path class="missile-wake" d="M-5 10 L0 22 L5 10"/>
       <path class="missile-body" d="M0 -15 L8 8 L3 6 L0 12 L-3 6 L-8 8 Z"/><text x="0" y="2">M</text>
     </g>`;
   };
@@ -92,11 +98,16 @@ export function mountMatch(root) {
   };
   const firingSolution = (ship, target, weapon) => {
     const range = axialDistance(ship.position, target.position);
-    const profile = weapon.type === "beam" ? { limits: [3, 6, 9], hit: ["2+", "3+", "4+"], damage: [3, 2, 1] } : { limits: [4, 8, 12], hit: ["3+", "4+", "5+"], damage: [2, 2, 2] };
+    const profile = weapon.type === "beam" ? { limits: [3, 6, 9], hit: [2, 3, 4], damage: [3, 2, 1] } : { limits: [4, 8, 12], hit: [3, 4, 5], damage: [2, 2, 2] };
     const bracket = profile.limits.findIndex((limit) => range <= limit);
     const inArc = targetInArc(ship, target, weapon.arc); const legal = bracket >= 0 && inArc;
     const problem = bracket < 0 ? "OUT OF RANGE" : !inArc ? "OUTSIDE FIRING ARC" : "LEGAL SHOT";
-    return { range, bracket, inArc, legal, problem, band: ["Short", "Medium", "Long"][bracket], hit: profile.hit[bracket], damage: profile.damage[bracket] };
+    const missileTarget = Boolean(target.owner);
+    // Mirrors RulesEngine::MISSILE_TARGET_TO_HIT_PENALTY: firing at a missile
+    // suffers -1 on the die, represented here by a target number one higher.
+    const missilePenalty = 1;
+    const hit = bracket >= 0 ? `${profile.hit[bracket] + (missileTarget ? missilePenalty : 0)}+` : undefined;
+    return { range, bracket, inArc, legal, problem, band: ["Short", "Medium", "Long"][bracket], hit, damage: missileTarget ? "Destroy" : profile.damage[bracket], missileTarget };
   };
   const currentTurnMode = (ship) => {
     const speed = Number(ship.allocation.speed); const speedBand = speed <= 4 ? 0 : speed <= 8 ? 1 : 2;
@@ -169,7 +180,7 @@ export function mountMatch(root) {
     }
     const poweredWeapons = ship.weapons.filter((weapon) => weapon.type !== "missile" && !weapon.destroyed && !weapon.fired && ship.allocation.weapons.includes(weapon.id));
     const selectedWeapon = poweredWeapons.find((weapon) => weapon.id === selectedWeaponId);
-    return `<div class="control-stack">${activityStrip()}<p class="step-help">${selectedWeapon ? `Now hover over an enemy ship to inspect the shot, then click a legal target to fire ${selectedWeapon.mount || weaponName(selectedWeapon)}.` : "Select a powered weapon, then choose its target on the battlefield or fleet list."}</p>${poweredWeapons.map((weapon) => `<button class="secondary select-weapon ${weapon.id === selectedWeaponId ? "selected" : ""}" data-weapon="${weapon.id}">${weapon.id === selectedWeaponId ? "Selected" : "Select"} ${weapon.mount ? `${weapon.mount} ` : ""}${weaponName(weapon)} · Arc ${weapon.arc.join("/")}<small>${weapon.id === selectedWeaponId ? "Choose an enemy target" : `${weaponEnergy(weapon)} energy · unfired`}</small></button>`).join("")}${poweredWeapons.length ? "" : `<p class="no-legal-action">No unfired direct weapon is powered this turn.</p>`}${selectedWeapon ? `<button class="secondary cancel-weapon">Cancel target selection</button>` : ""}<button class="primary finish-impulse">${state.impulse >= 12 ? "End turn" : "End impulse"}</button></div>`;
+    return `<div class="control-stack">${activityStrip()}<p class="step-help">${selectedWeapon ? `Now hover over an enemy ship or missile to inspect the shot, then click a legal target to fire ${selectedWeapon.mount || weaponName(selectedWeapon)}.` : "Select a powered weapon, then choose an enemy ship or missile on the battlefield."}</p>${poweredWeapons.map((weapon) => `<button class="secondary select-weapon ${weapon.id === selectedWeaponId ? "selected" : ""}" data-weapon="${weapon.id}">${weapon.id === selectedWeaponId ? "Selected" : "Select"} ${weapon.mount ? `${weapon.mount} ` : ""}${weaponName(weapon)} · Arc ${weapon.arc.join("/")}<small>${weapon.id === selectedWeaponId ? "Choose an enemy ship or missile" : `${weaponEnergy(weapon)} energy · unfired`}</small></button>`).join("")}${poweredWeapons.length ? "" : `<p class="no-legal-action">No unfired direct weapon is powered this turn.</p>`}${selectedWeapon ? `<button class="secondary cancel-weapon">Cancel target selection</button>` : ""}<button class="primary finish-impulse">${state.impulse >= 12 ? "End turn" : "End impulse"}</button></div>`;
   };
   const bind = (ship, target) => {
     root.querySelector(".switch-player")?.addEventListener("click", () => { if (!state.solo) { player = player === "player_one" ? "player_two" : "player_one"; render(); } });
@@ -253,10 +264,10 @@ export function mountMatch(root) {
     };
     const showTargetHint = (event, targetControl) => {
       const weapon = ship?.weapons.find((entry) => entry.id === selectedWeaponId);
-      const candidate = state.ships.find((entry) => entry.id === targetControl.dataset.targetId);
+      const candidate = findTarget(targetControl.dataset.targetId);
       if (!hint || !weapon || !candidate) return;
       const solution = firingSolution(ship, candidate, weapon);
-      hint.innerHTML = `${weaponHint(weapon)}<div class="target-firing-solution ${solution.legal ? "legal" : "illegal"}"><header><span>Target</span><b>${candidate.name}</b></header><div><span>Range</span><b>${solution.range}</b><span>Band</span><b>${solution.band || "—"}</b><span>To hit</span><b>${solution.hit || "—"}</b><span>Damage</span><b>${solution.damage || "—"}</b></div><strong>${solution.problem}</strong></div>`;
+      hint.innerHTML = `${weaponHint(weapon)}<div class="target-firing-solution ${solution.legal ? "legal" : "illegal"}"><header><span>${solution.missileTarget ? "Intercept · −1 die" : "Target"}</span><b>${targetName(candidate)}</b></header><div><span>Range</span><b>${solution.range}</b><span>Band</span><b>${solution.band || "—"}</b><span>To hit</span><b>${solution.hit || "—"}</b><span>${solution.missileTarget ? "On hit" : "Damage"}</span><b>${solution.damage || "—"}</b></div><strong>${solution.problem}</strong></div>`;
       hint.classList.add("visible"); hint.setAttribute("aria-hidden", "false");
       positionWeaponHint(event, targetControl);
     };
@@ -274,7 +285,7 @@ export function mountMatch(root) {
       targetControl.addEventListener("focus", (event) => showTargetHint(event, targetControl));
       targetControl.addEventListener("blur", hideWeaponHint);
       targetControl.addEventListener("click", () => {
-        const candidate = state.ships.find((entry) => entry.id === targetControl.dataset.targetId);
+        const candidate = findTarget(targetControl.dataset.targetId);
         const weapon = ship?.weapons.find((entry) => entry.id === selectedWeaponId);
         if (candidate && weapon && directWeaponLegal(ship, candidate, weapon)) request("fire", { ship_id: ship.id, target_id: candidate.id, weapon_id: weapon.id });
       });
