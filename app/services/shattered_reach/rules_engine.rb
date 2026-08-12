@@ -355,25 +355,26 @@ module ShatteredReach
       to_hit = profile[:to_hit][bracket]
       to_hit += MISSILE_TARGET_TO_HIT_PENALTY if target_type == :missile
       hit = roll >= to_hit
+      damage = nil
       if hit
         if target_type == :missile
           state["missiles"].delete_if { |missile| missile["id"] == target["id"] }
           log!(state, "#{attacker["name"]} destroys a seeker missile with #{profile[:label]} (#{roll}).")
         else
-          apply_damage!(state, target, profile[:damage][bracket], attacker)
+          damage = apply_damage!(state, target, profile[:damage][bracket], attacker)
           log!(state, "#{attacker["name"]} hits #{target["name"]} with #{profile[:label]} (#{roll}).")
         end
       else
         target_name = target_type == :missile ? "a seeker missile" : target["name"]
         log!(state, "#{attacker["name"]} misses #{target_name} (#{roll}).")
       end
-      record_combat_event!(state, attacker:, target:, target_type:, weapon:, profile:, roll:, to_hit:, hit:)
+      record_combat_event!(state, attacker:, target:, target_type:, weapon:, profile:, roll:, to_hit:, hit:, damage:)
       state["tutorial_step"] = 3 if state["scenario"] == "tutorial"
       check_victory!(state)
     end
     private_class_method :fire!
 
-    def self.record_combat_event!(state, attacker:, target:, target_type:, weapon:, profile:, roll:, to_hit:, hit:)
+    def self.record_combat_event!(state, attacker:, target:, target_type:, weapon:, profile:, roll:, to_hit:, hit:, damage: nil)
       event_id = state["next_combat_event_id"]
       state["next_combat_event_id"] += 1
       state["combat_events"] << {
@@ -390,7 +391,8 @@ module ShatteredReach
         "target_position" => target["position"].dup,
         "roll" => roll,
         "to_hit" => to_hit,
-        "hit" => hit
+        "hit" => hit,
+        "damage" => damage
       }
       state["combat_events"] = state["combat_events"].last(24)
     end
@@ -435,6 +437,7 @@ module ShatteredReach
 
         impacted = false
         2.times do
+          origin = missile["position"].dup
           direction = DIRECTIONS.each_index.min_by do |index|
             delta = DIRECTIONS[index]
             distance([missile["position"][0] + delta[0], missile["position"][1] + delta[1]], target["position"])
@@ -445,8 +448,9 @@ module ShatteredReach
           missile["position"][2] = direction
           next unless missile["position"].first(2) == target["position"].first(2)
 
-          apply_damage!(state, target, 3, nil)
+          damage = apply_damage!(state, target, 3, nil)
           log!(state, "Seeker missile hits #{target["name"]} for 3 damage.")
+          record_missile_impact!(state, missile, target, origin, damage)
           check_victory!(state)
           impacted = true
           break
@@ -456,6 +460,30 @@ module ShatteredReach
       state["missiles"] = surviving
     end
     private_class_method :move_missiles!
+
+    def self.record_missile_impact!(state, missile, target, origin, damage)
+      event_id = state["next_combat_event_id"]
+      state["next_combat_event_id"] += 1
+      state["combat_events"] << {
+        "id" => event_id,
+        "kind" => "missile_impact",
+        "weapon_type" => "missile",
+        "weapon_label" => "Seeker missile",
+        "attacker_id" => missile["launcher_ship_id"],
+        "attacker_name" => "Seeker missile",
+        "target_id" => target["id"],
+        "target_name" => target["name"],
+        "target_type" => "ship",
+        "origin" => origin,
+        "target_position" => target["position"].dup,
+        "roll" => "AUTO",
+        "to_hit" => 0,
+        "hit" => true,
+        "damage" => damage
+      }
+      state["combat_events"] = state["combat_events"].last(24)
+    end
+    private_class_method :record_missile_impact!
 
     def self.special!(state, player, payload)
       require_phase!(state, "impulse")
@@ -501,25 +529,50 @@ module ShatteredReach
     private_class_method :finish_impulse!
 
     def self.apply_damage!(state, target, amount, _attacker)
+      result = {
+        "amount" => amount,
+        "shield_bank" => nil,
+        "reinforcement_absorbed" => 0,
+        "shield_absorbed" => 0,
+        "hull" => 0,
+        "engines" => 0,
+        "weapons" => [],
+        "destroyed" => false
+      }
       shield = target["shields"]["front"] > 0 ? "front" : "aft"
+      result["shield_bank"] = shield
       reinforcement = target.dig("allocation", "shields", shield).to_i
       reinforced = [reinforcement, amount].min
+      result["reinforcement_absorbed"] = reinforced
       target["allocation"]["shields"][shield] -= reinforced
       amount -= reinforced
       absorbed = [target["shields"][shield], amount].min
+      result["shield_absorbed"] = absorbed
       target["shields"][shield] -= absorbed
       remaining = amount - absorbed
-      return if remaining.zero?
+      return result if remaining.zero?
       remaining.times do
         case next_roll(state)
-        when 1..3 then target["hull"] -= 1
-        when 4..5 then target["damage"]["engines"] += 1
+        when 1..3
+          target["hull"] -= 1
+          result["hull"] += 1
+        when 4..5
+          target["damage"]["engines"] += 1
+          result["engines"] += 1
         else
           available = target["weapons"].find { |weapon| !weapon["destroyed"] }
-          available ? available["destroyed"] = true : target["hull"] -= 1
+          if available
+            available["destroyed"] = true
+            result["weapons"] << { "id" => available["id"], "mount" => available["mount"], "type" => available["type"] }
+          else
+            target["hull"] -= 1
+            result["hull"] += 1
+          end
         end
       end
       target["destroyed"] = true if target["hull"] <= 0
+      result["destroyed"] = target["destroyed"]
+      result
     end
     private_class_method :apply_damage!
 

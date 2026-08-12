@@ -98,7 +98,7 @@ export const weaponHint = (weapon) => {
     <div class="weapon-hint-matrix"><span>Band</span><span>Range</span><span>Hit</span><span>Dmg</span>${bands.map(([band, range, hit, damage]) => `<b>${band}</b><i>${range}</i><i>${hit}</i><i>${damage}</i>`).join("")}</div>`;
 };
 
-const weaponHardpoints = (ship, hidden) => {
+const weaponHardpoints = (ship, hidden, damagedWeaponIds = []) => {
   const mounts = HARDPOINTS[ship.key] || [];
   const selectedId = (ship.weapons.find((weapon) => !weapon.destroyed) || ship.weapons[0])?.id;
   return ship.weapons.map((weapon, index) => {
@@ -107,14 +107,14 @@ const weaponHardpoints = (ship, hidden) => {
     const profile = WEAPONS[weapon.type];
     const pipCount = weapon.type === "missile" ? Math.min(weapon.ammo || 0, 4) : profile.energy;
     const pips = Array.from({ length: pipCount }, (_, pip) => `<circle class="hardpoint-pip" cx="${x - ((pipCount - 1) * .8) + (pip * 1.6)}" cy="${y + 2.55}" r=".4"/>`).join("");
-    return `<g class="weapon-hardpoint ${state} ${weapon.id === selectedId ? "selected" : ""}" data-weapon-id="${weapon.id}" data-arcs="${weapon.arc.join(" ")}" data-weapon-label="${profile.label}" tabindex="0" role="button" aria-label="${profile.label}, ${state}">
+    return `<g class="weapon-hardpoint ${state} ${weapon.id === selectedId ? "selected" : ""} ${damagedWeaponIds.includes(weapon.id) ? "recent-damage" : ""}" data-weapon-id="${weapon.id}" data-arcs="${weapon.arc.join(" ")}" data-weapon-label="${profile.label}" tabindex="0" role="button" aria-label="${profile.label}, ${state}">
       <title>${profile.label} · ${weapon.arc.join("/")} · ${state}</title><rect class="hardpoint-bay" x="${x - 4.2}" y="${y - 4.2}" width="8.4" height="8.4" rx="1.1"/><rect class="hardpoint-control" x="${x - 3.2}" y="${y - 3.2}" width="6.4" height="6.4" rx=".5"/><text x="${x}" y="${y + .8}">${weaponAbbreviation(weapon)}</text>${pips}<path class="hardpoint-damage" d="M${x - 2.4} ${y - 2.4}L${x + 2.4} ${y + 2.4}M${x + 2.4} ${y - 2.4}L${x - 2.4} ${y + 2.4}"/>
     </g>`;
   }).join("");
 };
 
 export function shipGlyph(ship, className = "", options = {}) {
-  const hardpoints = options.hardpoints ? weaponHardpoints(ship, options.hidden) : "";
+  const hardpoints = options.hardpoints ? weaponHardpoints(ship, options.hidden, options.damagedWeaponIds) : "";
   const accessibility = options.hardpoints ? `role="group" aria-label="${ship.name} weapon hardpoints"` : "aria-hidden=\"true\"";
   return `<svg class="ship-glyph ${className}" viewBox="-44 -44 88 88" ${accessibility}><g class="ship-token fleet-${ship.fleet}">${shipHull(ship)}</g>${hardpoints}</svg>`;
 }
@@ -148,29 +148,29 @@ const trackBoxes = (count, active, kind, startAt = 1) => Array.from({ length: co
   return `<span class="track-box ${online ? "online" : "spent"} ${kind}">${index + startAt}</span>`;
 }).join("");
 
-const systemTrack = (label, count, active, kind, note = "") => {
+const systemTrack = (label, count, active, kind, note = "", recentDamage = false) => {
   return `
-  <section class="system-track ${kind}">
+  <section class="system-track ${kind} ${recentDamage ? "recent-damage" : ""}">
     <header><h3>${label}</h3><span>${active}/${count}${note ? ` · ${note}` : ""}</span></header>
     <div class="track-boxes">${trackBoxes(count, active, kind)}</div>
   </section>`;
 };
 
-const shieldBank = (label, count, active, columns) => {
+const shieldBank = (label, count, active, columns, recentDamage = false) => {
   const boxWidth = `calc(${(100 / columns).toFixed(4)}% - ${(((columns - 1) * 2) / columns).toFixed(2)}px)`;
-  return `<div class="compact-shield-bank">
+  return `<div class="compact-shield-bank ${recentDamage ? "recent-damage" : ""}">
     <div><span>${label}</span><b>${active}/${count}</b></div>
     <div class="compact-shield-boxes" style="--shield-box-width:${boxWidth}">${trackBoxes(count, active, "shield")}</div>
   </div>`;
 };
 
-const shieldPanel = (ship, maxFront, maxAft) => {
+const shieldPanel = (ship, maxFront, maxAft, damage = {}) => {
   const columns = Math.max(maxFront, maxAft);
   return `<section class="shield-console">
     <header><h3>Shield array</h3><span>hemisphere strength</span></header>
-    ${shieldBank("Forward", maxFront, ship.shields.front, columns)}
+    ${shieldBank("Forward", maxFront, ship.shields.front, columns, damage.shield_bank === "front" && (damage.shield_absorbed > 0 || damage.reinforcement_absorbed > 0))}
     <div class="shield-axis"><span>F</span><i></i><span>A</span></div>
-    ${shieldBank("Aft", maxAft, ship.shields.aft, columns)}
+    ${shieldBank("Aft", maxAft, ship.shields.aft, columns, damage.shield_bank === "aft" && (damage.shield_absorbed > 0 || damage.reinforcement_absorbed > 0))}
   </section>`;
 };
 
@@ -207,7 +207,21 @@ const weaponChart = (type) => {
   </table></section>`;
 };
 
-export function shipSchematic(ship, state, player) {
+const damageReport = (event) => {
+  if (!event?.damage) return "";
+  const damage = event.damage;
+  const details = [];
+  if (damage.reinforcement_absorbed > 0) details.push(`${damage.shield_bank} reinforcement absorbed ${damage.reinforcement_absorbed}`);
+  if (damage.shield_absorbed > 0) details.push(`${damage.shield_bank} shield −${damage.shield_absorbed}`);
+  if (damage.hull > 0) details.push(`hull −${damage.hull}`);
+  if (damage.engines > 0) details.push(`engines −${damage.engines}`);
+  (damage.weapons || []).forEach((weapon) => details.push(`${weapon.mount || weaponAbbreviation(weapon)} ${WEAPONS[weapon.type]?.label || "weapon"} destroyed`));
+  if (damage.destroyed) details.push("ship destroyed");
+  const summary = details.length ? details : ["impact fully absorbed"];
+  return `<aside class="damage-report" role="status" aria-live="assertive"><div><span>Damage report</span><b>${event.weapon_label} impact · ${damage.amount} damage</b></div><ul>${summary.map((detail) => `<li>${detail}</li>`).join("")}</ul></aside>`;
+};
+
+export function shipSchematic(ship, state, player, damageEvent = null) {
   const privateAllocation = state.phase === "allocation" && ship.player !== player;
   const availableEnergy = Math.max(ship.energy - ship.damage.engines, 0);
   const maxFrontShields = ship.max_front_shields || ship.shields.front;
@@ -218,20 +232,23 @@ export function shipSchematic(ship, state, player) {
   const hexColumn = ship.position[0] + 1;
   const hexRow = ship.position[1] + Math.floor(ship.position[0] / 2) + 1;
   const hexReference = `${String(hexColumn).padStart(2, "0")}${String(hexRow).padStart(2, "0")}`;
+  const recentDamage = damageEvent?.damage || {};
+  const damagedWeaponIds = (recentDamage.weapons || []).map((weapon) => weapon.id);
 
   return `<div class="schematic-backdrop" role="presentation">
-    <section class="ship-schematic fleet-${ship.fleet}" role="dialog" aria-modal="true" aria-labelledby="schematic-title">
+    <section class="ship-schematic fleet-${ship.fleet} ${damageEvent ? "damage-review" : ""}" role="dialog" aria-modal="true" aria-labelledby="schematic-title">
       <header class="schematic-header">
         <div><p class="eyebrow">${fleetName(ship.fleet)} · ${ship.size} hull · ${owner}</p><h2 id="schematic-title">${ship.name}</h2></div>
         <dl class="header-readout"><div><dt>Hex</dt><dd>${hexReference}</dd></div><div><dt>Facing</dt><dd>${ship.position[2]}</dd></div><div><dt>Turn</dt><dd>${state.turn}</dd></div><div><dt>Impulse</dt><dd>${state.impulse}</dd></div><div><dt>Energy</dt><dd>${availableEnergy}</dd></div></dl>
         <button class="schematic-close" aria-label="Close ship schematic">×</button>
       </header>
+      ${damageReport(damageEvent)}
       <div class="schematic-grid">
         <div class="schematic-systems">
           ${movementTrack(ship.allocation.speed, privateAllocation)}
-          ${systemTrack("Reactor / engines", ship.energy, availableEnergy, "energy", `${ship.damage.engines} damaged`)}
-          ${systemTrack("Hull integrity", ship.max_hull, Math.max(ship.hull, 0), "hull")}
-          ${shieldPanel(ship, maxFrontShields, maxAftShields)}
+          ${systemTrack("Reactor / engines", ship.energy, availableEnergy, "energy", `${ship.damage.engines} damaged`, recentDamage.engines > 0)}
+          ${systemTrack("Hull integrity", ship.max_hull, Math.max(ship.hull, 0), "hull", "", recentDamage.hull > 0)}
+          ${shieldPanel(ship, maxFrontShields, maxAftShields, recentDamage)}
           ${turnModes(ship.size)}
           <section class="maneuver-status ${ship.special_available ? "ready" : "spent"}"><span></span><div><h3>Special maneuver</h3><p>${maneuver}</p></div></section>
         </div>
@@ -239,7 +256,7 @@ export function shipSchematic(ship, state, player) {
           <div class="schematic-hull">
             <div class="schematic-view-controls"><span>Engineering view</span><button class="toggle-arcs" type="button" aria-pressed="false">Show firing arcs</button></div>
             ${arcHexCluster(ship)}
-            ${shipGlyph(ship, "ship-glyph-schematic", { hardpoints: true, hidden: privateAllocation })}
+            ${shipGlyph(ship, "ship-glyph-schematic", { hardpoints: true, hidden: privateAllocation, damagedWeaponIds })}
           </div>
           <div class="weapon-rack">${ship.weapons.map((weapon) => weaponModule(weapon, ship, privateAllocation)).join("")}</div>
         </div>

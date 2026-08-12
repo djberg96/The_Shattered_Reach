@@ -204,6 +204,36 @@ class ShatteredReach::RulesEngineTest < ActiveSupport::TestCase
       "origin" => attacker["position"], "target_position" => target["position"], "roll" => 5,
       "to_hit" => 4, "hit" => true
     }, result["combat_events"].last.slice("weapon_type", "attacker_id", "target_id", "origin", "target_position", "roll", "to_hit", "hit"))
+    assert_equal({
+      "amount" => 1, "shield_bank" => "front", "reinforcement_absorbed" => 0,
+      "shield_absorbed" => 1, "hull" => 0, "engines" => 0, "weapons" => [], "destroyed" => false
+    }, result["combat_events"].last["damage"])
+  end
+
+  test "a penetrating hit records each damaged system for presentation" do
+    state = ShatteredReach::RulesEngine.start
+    attacker, target = state["ships"]
+    attacker["position"] = [0, 0, 0]
+    target["position"] = [1, 0, 3]
+    target["shields"] = { "front" => 0, "aft" => 0 }
+    weapon = attacker["weapons"].find { |entry| entry["type"] == "beam" }
+    weapon["arc"] = ["F"]
+    attacker["allocation"]["weapons"] = [weapon["id"]]
+    state["phase"] = "impulse"
+    state["impulse"] = 1
+    state["activity_step"] = "fire"
+    state["impulse_order"] = Array.new(3) { [0, 1, 2, 3] }
+    state["seed"] = 6
+
+    result = ShatteredReach::RulesEngine.apply(state, player: attacker["player"], action: "fire", payload: { "ship_id" => attacker["id"], "target_id" => target["id"], "weapon_id" => weapon["id"] })
+    damage = result["combat_events"].last["damage"]
+
+    assert_equal 3, damage["amount"]
+    assert_equal 0, damage["shield_absorbed"]
+    assert_equal 1, damage["hull"]
+    assert_equal 1, damage["engines"]
+    assert_equal 1, damage["weapons"].length
+    assert_equal target["weapons"].first["id"], damage["weapons"].first["id"]
   end
 
   test "a missile launches after movement without immediately damaging its target" do
@@ -320,6 +350,10 @@ class ShatteredReach::RulesEngineTest < ActiveSupport::TestCase
     assert_empty result["missiles"]
     assert_equal shields_before - 3, result["ships"].first.dig("shields", "front")
     assert_match(/hits .* for 3 damage/, result["log"].last)
+    event = result["combat_events"].last
+    assert_equal "missile_impact", event["kind"]
+    assert_equal target["id"], event["target_id"]
+    assert_equal 3, event.dig("damage", "shield_absorbed")
   end
 
   test "weapons fire once per turn rather than once per impulse" do
