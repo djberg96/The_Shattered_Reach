@@ -9,8 +9,19 @@ class ShatteredReach::GameDefinitionTest < ActiveSupport::TestCase
     [[4, 6, 8, 10, 11, 12], [3, 6, 8, 9, 10, 11, 12], [2, 5, 7, 9, 11, 12], [5, 7, 8, 9, 10, 11, 12]]
   ].freeze
 
-  test "impulse data exactly matches the twelve original card images" do
-    assert_equal ORIGINAL_IMPULSE_CARDS, ShatteredReach::GameDefinition::IMPULSE_DECKS
+  test "digital impulse data preserves the original cards with the corrected card seven" do
+    expected = Marshal.load(Marshal.dump(ORIGINAL_IMPULSE_CARDS))
+    expected[1][2] = [4, 6, 7, 8, 9, 10, 11, 12]
+
+    assert_equal expected, ShatteredReach::GameDefinition::IMPULSE_DECKS
+  end
+
+  test "each speed receives exactly that many movement opportunities per turn" do
+    appearances = ShatteredReach::GameDefinition::IMPULSE_DECKS.flatten.tally
+
+    (1..12).each do |speed|
+      assert_equal speed, appearances.fetch(speed, 0), "speed #{speed} should appear on #{speed} cards"
+    end
   end
 
   EXPECTED_LOADOUTS = {
