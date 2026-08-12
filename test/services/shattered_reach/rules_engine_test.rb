@@ -98,7 +98,7 @@ class ShatteredReach::RulesEngineTest < ActiveSupport::TestCase
     assert_includes %w[player_one player_two], state["initiative"]
   end
 
-  test "an impulse moves ships whose speed appears on its card" do
+  test "an impulse offers legal movement to ships whose speed appears on its card" do
     state = ShatteredReach::RulesEngine.start
     state["ships"].each do |ship|
       state = ShatteredReach::RulesEngine.apply(state, player: ship["player"], action: "allocate", payload: { "ship_id" => ship["id"], "speed" => 1, "shields" => 0 })
@@ -107,7 +107,15 @@ class ShatteredReach::RulesEngineTest < ActiveSupport::TestCase
     before = state["ships"].first["position"].dup
     state = ShatteredReach::RulesEngine.apply(state, player: "player_one", action: "advance_impulse")
 
+    assert_equal "movement", state["activity_step"]
+    assert_includes state["movement_options"], "forward"
+    while state["activity_step"] == "movement"
+      moving_ship = state["ships"].find { |ship| ship["id"] == state["pending_movement"].first }
+      state = ShatteredReach::RulesEngine.apply(state, player: moving_ship["player"], action: "move_ship", payload: { "ship_id" => moving_ship["id"], "maneuver" => "forward" })
+    end
+
     assert_equal [before[0] + 1, before[1], before[2]], state["ships"].first["position"]
+    assert_equal "launch", state["activity_step"]
   end
 
   test "a fired beam depletes shields before hull" do
@@ -117,6 +125,7 @@ class ShatteredReach::RulesEngineTest < ActiveSupport::TestCase
     attacker["allocation"] = { "speed" => 0, "shields" => 0, "weapons" => [attacker["weapons"].first["id"]] }
     state["phase"] = "impulse"
     state["impulse"] = 1
+    state["activity_step"] = "fire"
     state["seed"] = 3
     before_shield = target["shields"]["front"]
 
@@ -132,10 +141,11 @@ class ShatteredReach::RulesEngineTest < ActiveSupport::TestCase
     missile_launcher = attacker["weapons"].find { |weapon| weapon["type"] == "missile" }
     state["phase"] = "impulse"
     state["impulse"] = 1
+    state["activity_step"] = "launch"
     shields_before = target["shields"].dup
     launch_position = attacker["position"].dup
 
-    result = ShatteredReach::RulesEngine.apply(state, player: attacker["player"], action: "fire", payload: { "ship_id" => attacker["id"], "target_id" => target["id"], "weapon_id" => missile_launcher["id"] })
+    result = ShatteredReach::RulesEngine.apply(state, player: attacker["player"], action: "launch_missile", payload: { "ship_id" => attacker["id"], "target_id" => target["id"], "weapon_id" => missile_launcher["id"] })
 
     assert_equal shields_before, result["ships"].first["shields"]
     assert_equal launch_position, result["missiles"].first["position"]
@@ -149,9 +159,11 @@ class ShatteredReach::RulesEngineTest < ActiveSupport::TestCase
     missile_launcher = attacker["weapons"].find { |weapon| weapon["type"] == "missile" }
     state["phase"] = "impulse"
     state["impulse"] = 1
-    state = ShatteredReach::RulesEngine.apply(state, player: attacker["player"], action: "fire", payload: { "ship_id" => attacker["id"], "target_id" => target["id"], "weapon_id" => missile_launcher["id"] })
+    state["activity_step"] = "launch"
+    state = ShatteredReach::RulesEngine.apply(state, player: attacker["player"], action: "launch_missile", payload: { "ship_id" => attacker["id"], "target_id" => target["id"], "weapon_id" => missile_launcher["id"] })
     before = state["missiles"].first["position"].dup
-
+    state = ShatteredReach::RulesEngine.apply(state, player: "player_one", action: "finish_launches")
+    state = ShatteredReach::RulesEngine.apply(state, player: "player_one", action: "finish_impulse")
     result = ShatteredReach::RulesEngine.apply(state, player: "player_one", action: "advance_impulse")
 
     assert_equal 2, ShatteredReach::RulesEngine.distance(before, result["missiles"].first["position"])
@@ -165,9 +177,11 @@ class ShatteredReach::RulesEngineTest < ActiveSupport::TestCase
     missile_launcher = attacker["weapons"].find { |weapon| weapon["type"] == "missile" }
     state["phase"] = "impulse"
     state["impulse"] = 1
-    state = ShatteredReach::RulesEngine.apply(state, player: attacker["player"], action: "fire", payload: { "ship_id" => attacker["id"], "target_id" => target["id"], "weapon_id" => missile_launcher["id"] })
+    state["activity_step"] = "launch"
+    state = ShatteredReach::RulesEngine.apply(state, player: attacker["player"], action: "launch_missile", payload: { "ship_id" => attacker["id"], "target_id" => target["id"], "weapon_id" => missile_launcher["id"] })
     shields_before = state["ships"].first.dig("shields", "front")
-
+    state = ShatteredReach::RulesEngine.apply(state, player: "player_one", action: "finish_launches")
+    state = ShatteredReach::RulesEngine.apply(state, player: "player_one", action: "finish_impulse")
     result = ShatteredReach::RulesEngine.apply(state, player: "player_one", action: "advance_impulse")
 
     assert_empty result["missiles"]
@@ -181,11 +195,72 @@ class ShatteredReach::RulesEngineTest < ActiveSupport::TestCase
     missile_launcher = attacker["weapons"].find { |weapon| weapon["type"] == "missile" }
     state["phase"] = "impulse"
     state["impulse"] = 1
-    state = ShatteredReach::RulesEngine.apply(state, player: attacker["player"], action: "fire", payload: { "ship_id" => attacker["id"], "target_id" => target["id"], "weapon_id" => missile_launcher["id"] })
+    state["activity_step"] = "launch"
+    state = ShatteredReach::RulesEngine.apply(state, player: attacker["player"], action: "launch_missile", payload: { "ship_id" => attacker["id"], "target_id" => target["id"], "weapon_id" => missile_launcher["id"] })
+    state = ShatteredReach::RulesEngine.apply(state, player: "player_one", action: "finish_launches")
+    state = ShatteredReach::RulesEngine.apply(state, player: "player_one", action: "finish_impulse")
     state = ShatteredReach::RulesEngine.apply(state, player: "player_one", action: "advance_impulse")
 
     assert_raises(ShatteredReach::RulesEngine::IllegalAction) do
-      ShatteredReach::RulesEngine.apply(state, player: attacker["player"], action: "fire", payload: { "ship_id" => attacker["id"], "target_id" => target["id"], "weapon_id" => missile_launcher["id"] })
+      ShatteredReach::RulesEngine.apply(state, player: attacker["player"], action: "launch_missile", payload: { "ship_id" => attacker["id"], "target_id" => target["id"], "weapon_id" => missile_launcher["id"] })
     end
+  end
+
+  test "movement must resolve before launches and direct fire" do
+    state = ShatteredReach::RulesEngine.start
+    state["ships"].each do |ship|
+      state = ShatteredReach::RulesEngine.apply(state, player: ship["player"], action: "allocate", payload: { "ship_id" => ship["id"], "speed" => 1, "weapons" => [] })
+      state = ShatteredReach::RulesEngine.apply(state, player: ship["player"], action: "lock_allocation")
+    end
+    state = ShatteredReach::RulesEngine.apply(state, player: "player_one", action: "advance_impulse")
+
+    assert_raises(ShatteredReach::RulesEngine::IllegalAction) do
+      ShatteredReach::RulesEngine.apply(state, player: "player_one", action: "finish_launches")
+    end
+
+    while state["activity_step"] == "movement"
+      moving_ship = state["ships"].find { |ship| ship["id"] == state["pending_movement"].first }
+      state = ShatteredReach::RulesEngine.apply(state, player: moving_ship["player"], action: "move_ship", payload: { "ship_id" => moving_ship["id"], "maneuver" => state["movement_options"].first })
+    end
+    assert_equal "launch", state["activity_step"]
+    state = ShatteredReach::RulesEngine.apply(state, player: "player_one", action: "finish_launches")
+    assert_equal "fire", state["activity_step"]
+  end
+
+  test "turn mode and consecutive side-slip restrictions are enforced" do
+    state = ShatteredReach::RulesEngine.start
+    ship = state["ships"].first
+    ship["allocation"]["speed"] = 5
+    state["phase"] = "impulse"
+    state["activity_step"] = "movement"
+    state["pending_movement"] = [ship["id"]]
+    state["movement_options"] = ShatteredReach::RulesEngine.legal_movement_actions(state, ship["id"])
+
+    assert_equal 2, ShatteredReach::RulesEngine.turn_mode(ship)
+    refute_includes state["movement_options"], "turn_left"
+    state = ShatteredReach::RulesEngine.apply(state, player: ship["player"], action: "move_ship", payload: { "ship_id" => ship["id"], "maneuver" => "sideslip_left" })
+    ship = state["ships"].first
+
+    assert_equal "sideslip", ship.dig("movement", "last_action")
+    refute_includes ShatteredReach::RulesEngine.legal_movement_actions(state, ship["id"]), "sideslip_left"
+    refute_includes ShatteredReach::RulesEngine.legal_movement_actions(state, ship["id"]), "sideslip_right"
+  end
+
+  test "direct fire enforces the weapon's firing arc" do
+    state = ShatteredReach::RulesEngine.start
+    attacker, target = state["ships"]
+    attacker["position"] = [0, 0, 0]
+    target["position"] = [2, 0, 3]
+    port_beam = attacker["weapons"].find { |weapon| weapon["type"] == "beam" && weapon["arc"] == ["L"] }
+    attacker["allocation"]["weapons"] = [port_beam["id"]]
+    state["phase"] = "impulse"
+    state["activity_step"] = "fire"
+    state["impulse"] = 1
+
+    error = assert_raises(ShatteredReach::RulesEngine::IllegalAction) do
+      ShatteredReach::RulesEngine.apply(state, player: attacker["player"], action: "fire", payload: { "ship_id" => attacker["id"], "target_id" => target["id"], "weapon_id" => port_beam["id"] })
+    end
+
+    assert_match(/firing arc/, error.message)
   end
 end

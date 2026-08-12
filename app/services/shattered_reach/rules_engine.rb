@@ -18,6 +18,7 @@ module ShatteredReach
       {
         "version" => GameDefinition::VERSION, "scenario" => scenario.to_s, "solo" => solo, "board_size" => board_size, "turn" => 1,
         "phase" => "allocation", "impulse" => 0, "seed" => 17, "initiative" => nil,
+        "activity_step" => "allocation", "impulse_card" => nil, "pending_movement" => [], "movement_options" => [],
         "ships" => ships, "missiles" => [], "next_missile_id" => 1,
         "log" => ["Battle stations. Allocate energy in secret."], "winner" => nil,
         "tutorial_step" => scenario == :tutorial ? 0 : nil
@@ -42,8 +43,12 @@ module ShatteredReach
       case action.to_s
       when "allocate" then allocate!(state, player, payload)
       when "lock_allocation" then lock_allocation!(state, player)
-      when "advance_impulse" then advance_impulse!(state)
+      when "advance_impulse" then draw_impulse!(state)
+      when "move_ship" then move_ship!(state, player, payload)
+      when "launch_missile" then launch_missile_action!(state, player, payload)
+      when "finish_launches" then finish_launches!(state)
       when "fire" then fire!(state, player, payload)
+      when "finish_impulse" then finish_impulse!(state)
       when "special" then special!(state, player, payload)
       else raise IllegalAction, "Unknown action: #{action}"
       end
@@ -60,6 +65,10 @@ module ShatteredReach
       migrate_loadouts!(state) if state["version"] != GameDefinition::VERSION
       state["missiles"] ||= []
       state["next_missile_id"] ||= state["missiles"].length + 1
+      state["activity_step"] ||= state["phase"] == "allocation" ? "allocation" : "fire"
+      state["impulse_card"] ||= nil
+      state["pending_movement"] ||= []
+      state["movement_options"] ||= []
 
       state["ships"].each do |ship|
         spec = GameDefinition::SHIPS[ship["key"]]
@@ -73,6 +82,7 @@ module ShatteredReach
         end
         allocation["shields"]["front"] ||= 0
         allocation["shields"]["aft"] ||= 0
+        ship["movement"] ||= { "hexes_since_turn" => 0, "last_action" => nil }
       end
       state
     end
@@ -105,7 +115,7 @@ module ShatteredReach
         "shields" => { "front" => spec[:front_shields], "aft" => spec[:aft_shields] }, "max_front_shields" => spec[:front_shields], "max_aft_shields" => spec[:aft_shields],
         "allocation" => { "speed" => 0, "shields" => { "front" => 0, "aft" => 0 }, "weapons" => [] },
         "locked" => false, "special_available" => spec[:size] != "large", "weapons" => spec[:weapons].map.with_index { |w, i| w.stringify_keys.merge("id" => "w#{i}", "destroyed" => false, "fired" => false) },
-        "damage" => { "engines" => 0, "weapons" => 0 }, "destroyed" => false
+        "damage" => { "engines" => 0, "weapons" => 0 }, "movement" => { "hexes_since_turn" => 0, "last_action" => nil }, "destroyed" => false
       }
     end
     private_class_method :build_ship
@@ -136,48 +146,184 @@ module ShatteredReach
       return unless state["ships"].all? { |ship| ship["locked"] || ship["destroyed"] }
       state["initiative"] = next_roll(state) >= next_roll(state) ? "player_one" : "player_two"
       state["phase"] = "impulse"
+      state["activity_step"] = "draw"
       state["tutorial_step"] = 1 if state["scenario"] == "tutorial"
       log!(state, "Initiative: #{label(state["initiative"])}. Draw the first impulse.")
     end
     private_class_method :lock_allocation!
 
-    def self.advance_impulse!(state)
+    def self.draw_impulse!(state)
       require_phase!(state, "impulse")
+      require_activity_step!(state, "draw")
       state["impulse"] += 1
-      if state["impulse"] > 12
-        finish_turn!(state)
+      card = impulse_card(state)
+      state["impulse_card"] = card
+      movers = state["ships"].reject { |ship| ship["destroyed"] || !card.include?(ship.dig("allocation", "speed")) }
+      state["pending_movement"] = movers.sort_by do |ship|
+        initiative_order = ship["player"] == state["initiative"] ? 0 : 1
+        [ship.dig("allocation", "speed"), initiative_order]
+      end.map { |ship| ship["id"] }
+      state["activity_step"] = "movement"
+      log!(state, "Impulse #{state["impulse"]}: speeds #{card.join(", ")} may move.")
+      if state["pending_movement"].empty?
+        complete_movement!(state)
+      else
+        update_movement_options!(state)
+      end
+    end
+    private_class_method :draw_impulse!
+
+    def self.move_ship!(state, player, payload)
+      require_phase!(state, "impulse")
+      require_activity_step!(state, "movement")
+      ship = owned_ship!(state, player, payload.fetch("ship_id"))
+      raise IllegalAction, "Another ship moves first" unless state["pending_movement"].first == ship["id"]
+
+      maneuver = payload.fetch("maneuver").to_s
+      raise IllegalAction, "That movement is not legal" unless state["movement_options"].include?(maneuver)
+
+      case maneuver
+      when "forward"
+        translate_ship!(state, ship, ship["position"][2], "moves forward")
+      when "sideslip_left"
+        translate_ship!(state, ship, (ship["position"][2] + 1) % 6, "side-slips port", sideslip: true)
+      when "sideslip_right"
+        translate_ship!(state, ship, (ship["position"][2] - 1) % 6, "side-slips starboard", sideslip: true)
+      when "turn_left"
+        ship["position"][2] = (ship["position"][2] + 1) % 6
+        ship["movement"] = { "hexes_since_turn" => 0, "last_action" => "turn" }
+        log!(state, "#{ship["name"]} turns sixty degrees to port.")
+      when "turn_right"
+        ship["position"][2] = (ship["position"][2] - 1) % 6
+        ship["movement"] = { "hexes_since_turn" => 0, "last_action" => "turn" }
+        log!(state, "#{ship["name"]} turns sixty degrees to starboard.")
+      when "lose_movement"
+        log!(state, "#{ship["name"]} has no legal maneuver and loses its movement.")
+      end
+      resolve_pending_movement!(state, ship)
+    end
+    private_class_method :move_ship!
+
+    def self.legal_movement_actions(state, ship_id)
+      ship = state["ships"].find { |entry| entry["id"] == ship_id && !entry["destroyed"] }
+      return [] unless ship
+
+      actions = []
+      actions << "forward" if translation_open?(state, ship, ship["position"][2])
+      if ship.dig("movement", "last_action") != "sideslip"
+        actions << "sideslip_left" if translation_open?(state, ship, (ship["position"][2] + 1) % 6)
+        actions << "sideslip_right" if translation_open?(state, ship, (ship["position"][2] - 1) % 6)
+      end
+      if ship.dig("movement", "hexes_since_turn").to_i >= turn_mode(ship)
+        actions.concat(%w[turn_left turn_right])
+      end
+      actions.empty? ? ["lose_movement"] : actions
+    end
+
+    def self.turn_mode(ship)
+      speed_band = case ship.dig("allocation", "speed").to_i
+                   when 1..4 then 0
+                   when 5..8 then 1
+                   else 2
+                   end
+      { "small" => 0, "medium" => 1, "large" => 2 }.fetch(ship["size"]) + speed_band
+    end
+
+    def self.translation_open?(state, ship, direction)
+      delta = DIRECTIONS[direction]
+      destination = [ship["position"][0] + delta[0], ship["position"][1] + delta[1]]
+      state["ships"].none? { |other| other["id"] != ship["id"] && !other["destroyed"] && other["position"].first(2) == destination }
+    end
+    private_class_method :translation_open?
+
+    def self.translate_ship!(state, ship, direction, description, sideslip: false)
+      delta = DIRECTIONS[direction]
+      ship["position"][0] += delta[0]
+      ship["position"][1] += delta[1]
+      ship["movement"]["hexes_since_turn"] = ship.dig("movement", "hexes_since_turn").to_i + 1
+      ship["movement"]["last_action"] = sideslip ? "sideslip" : "forward"
+      unless on_board?(state, ship["position"])
+        ship["destroyed"] = true
+        log!(state, "#{ship["name"]} leaves the battle map and is destroyed.")
+        check_victory!(state)
         return
       end
-      card = impulse_card(state)
-      state["ships"].reject { |ship| ship["destroyed"] }.sort_by { |ship| ship["allocation"]["speed"] }.each do |ship|
-        move_forward!(ship) if card.include?(ship["allocation"]["speed"])
+      log!(state, "#{ship["name"]} #{description}.")
+    end
+    private_class_method :translate_ship!
+
+    def self.on_board?(state, position)
+      column = position[0]
+      row = position[1] + (column / 2)
+      column.between?(0, state["board_size"] - 1) && row.between?(0, state["board_size"] - 1)
+    end
+    private_class_method :on_board?
+
+    def self.resolve_pending_movement!(state, ship)
+      state["pending_movement"].shift if state["pending_movement"].first == ship["id"]
+      state["pending_movement"].reject! { |ship_id| state["ships"].find { |entry| entry["id"] == ship_id }&.dig("destroyed") }
+      return if state["winner"]
+
+      if state["pending_movement"].empty?
+        complete_movement!(state)
+      else
+        update_movement_options!(state)
       end
+    end
+    private_class_method :resolve_pending_movement!
+
+    def self.update_movement_options!(state)
+      state["movement_options"] = legal_movement_actions(state, state["pending_movement"].first)
+    end
+    private_class_method :update_movement_options!
+
+    def self.complete_movement!(state)
+      state["pending_movement"] = []
+      state["movement_options"] = []
+      state["activity_step"] = "launch"
       state["tutorial_step"] = 2 if state["scenario"] == "tutorial" && state["impulse"] == 1
-      log!(state, "Impulse #{state["impulse"]}: speeds #{card.join(", ")} move.")
       move_missiles!(state)
     end
-    private_class_method :advance_impulse!
+    private_class_method :complete_movement!
+
+    def self.launch_missile_action!(state, player, payload)
+      require_phase!(state, "impulse")
+      require_activity_step!(state, "launch")
+      attacker = owned_ship!(state, player, payload.fetch("ship_id"))
+      target = state["ships"].find { |ship| ship["id"] == payload.fetch("target_id") && ship["player"] != player && !ship["destroyed"] }
+      raise IllegalAction, "No legal target" unless target
+      weapon = attacker["weapons"].find { |entry| entry["id"] == payload.fetch("weapon_id") }
+      raise IllegalAction, "Missile launcher unavailable" unless weapon && weapon["type"] == "missile" && !weapon["destroyed"] && !weapon["fired"]
+      raise IllegalAction, "Missile launcher is empty" if weapon["ammo"].to_i <= 0
+
+      launch_missile!(state, attacker, target, weapon)
+    end
+    private_class_method :launch_missile_action!
+
+    def self.finish_launches!(state)
+      require_phase!(state, "impulse")
+      require_activity_step!(state, "launch")
+      state["activity_step"] = "fire"
+      log!(state, "Missile launches complete. Resolve direct weapons fire.")
+    end
+    private_class_method :finish_launches!
 
     def self.fire!(state, player, payload)
       require_phase!(state, "impulse")
-      raise IllegalAction, "Draw an impulse card before launching or firing weapons" if state["impulse"].to_i.zero?
+      require_activity_step!(state, "fire")
       attacker = owned_ship!(state, player, payload.fetch("ship_id"))
       target = state["ships"].find { |ship| ship["id"] == payload.fetch("target_id") && ship["player"] != player && !ship["destroyed"] }
       raise IllegalAction, "No legal target" unless target
       weapon = attacker["weapons"].find { |entry| entry["id"] == payload.fetch("weapon_id") }
       raise IllegalAction, "Weapon unavailable" unless weapon && !weapon["destroyed"] && !weapon["fired"]
-      raise IllegalAction, "Missile launcher is empty" if weapon["type"] == "missile" && weapon["ammo"].to_i <= 0
-      raise IllegalAction, "Weapon was not allocated energy" unless weapon["type"] == "missile" || attacker["allocation"]["weapons"].include?(weapon["id"])
-      if weapon["type"] == "missile"
-        launch_missile!(state, attacker, target, weapon)
-        state["tutorial_step"] = 3 if state["scenario"] == "tutorial"
-        return
-      end
+      raise IllegalAction, "Missiles must be launched before direct weapons fire" if weapon["type"] == "missile"
+      raise IllegalAction, "Weapon was not allocated energy" unless attacker["allocation"]["weapons"].include?(weapon["id"])
 
       range = distance(attacker["position"], target["position"])
       profile = GameDefinition::WEAPONS.fetch(weapon["type"].to_s)
       bracket = profile[:ranges].index { |limit| range <= limit }
       raise IllegalAction, "Target is out of range" unless bracket
+      raise IllegalAction, "Target is outside this weapon's firing arc" unless target_in_arc?(attacker, target, weapon["arc"])
       weapon["fired"] = true
       roll = next_roll(state)
       hit = roll >= profile[:to_hit][bracket]
@@ -191,6 +337,20 @@ module ShatteredReach
       check_victory!(state)
     end
     private_class_method :fire!
+
+    def self.target_in_arc?(attacker, target, arcs)
+      bearing = DIRECTIONS.each_index.select do |direction|
+        delta = DIRECTIONS[direction]
+        distance([attacker["position"][0] + delta[0], attacker["position"][1] + delta[1]], target["position"]) < distance(attacker["position"], target["position"])
+      end
+      facing = attacker["position"][2]
+      permitted = Array(arcs).flat_map do |arc|
+        offsets = { "F" => [-1, 0, 1], "L" => [1, 2, 3], "A" => [2, 3, 4], "R" => [3, 4, 5] }.fetch(arc, [])
+        offsets.map { |offset| (facing + offset) % 6 }
+      end
+      (bearing & permitted).any?
+    end
+    private_class_method :target_in_arc?
 
     def self.launch_missile!(state, attacker, target, weapon)
       missile_id = state["next_missile_id"]
@@ -241,19 +401,44 @@ module ShatteredReach
 
     def self.special!(state, player, payload)
       require_phase!(state, "impulse")
+      require_activity_step!(state, "movement")
       ship = owned_ship!(state, player, payload.fetch("ship_id"))
+      raise IllegalAction, "Another ship moves first" unless state["pending_movement"].first == ship["id"]
       raise IllegalAction, "Special maneuver unavailable" unless ship["special_available"]
       maneuver = payload.fetch("maneuver")
       case maneuver
-      when "bootlegger" then ship["position"][2] = payload.fetch("direction").to_i % 6
-      when "quick_stop" then ship["allocation"]["speed"] = 0
-      when "emergency_power" then move_forward!(ship)
+      when "bootlegger"
+        ship["position"][2] = payload.fetch("direction").to_i % 6
+        ship["movement"] = { "hexes_since_turn" => 0, "last_action" => "turn" }
+      when "quick_stop"
+        ship["allocation"]["speed"] = 0
+      when "emergency_power"
+        raise IllegalAction, "The hex ahead is occupied" unless translation_open?(state, ship, ship["position"][2])
+        translate_ship!(state, ship, ship["position"][2], "surges forward on emergency power")
       else raise IllegalAction, "Unknown maneuver"
       end
       ship["special_available"] = false
       log!(state, "#{ship["name"]} executes #{maneuver.tr("_", " ")}.")
+      if maneuver == "quick_stop" || ship["destroyed"]
+        resolve_pending_movement!(state, ship)
+      else
+        update_movement_options!(state)
+      end
     end
     private_class_method :special!
+
+    def self.finish_impulse!(state)
+      require_phase!(state, "impulse")
+      require_activity_step!(state, "fire")
+      if state["impulse"] >= 12
+        finish_turn!(state)
+      else
+        state["activity_step"] = "draw"
+        state["impulse_card"] = nil
+        log!(state, "Impulse #{state["impulse"]} complete. Draw the next movement card.")
+      end
+    end
+    private_class_method :finish_impulse!
 
     def self.apply_damage!(state, target, amount, _attacker)
       shield = target["shields"]["front"] > 0 ? "front" : "aft"
@@ -282,12 +467,14 @@ module ShatteredReach
       check_victory!(state)
       return if state["winner"]
       state["turn"] += 1; state["phase"] = "allocation"; state["impulse"] = 0
+      state["activity_step"] = "allocation"; state["impulse_card"] = nil; state["pending_movement"] = []; state["movement_options"] = []
       state["ships"].each do |ship|
         next if ship["destroyed"]
 
         ship["locked"] = false
         ship["allocation"] = { "speed" => 0, "shields" => { "front" => 0, "aft" => 0 }, "weapons" => [] }
         ship["weapons"].each { |weapon| weapon["fired"] = false }
+        ship["movement"] = { "hexes_since_turn" => 0, "last_action" => nil }
       end
       log!(state, "Turn #{state["turn"]}. Allocate energy in secret.")
     end
@@ -301,10 +488,6 @@ module ShatteredReach
     def self.distance(a, b)
       ((a[0] - b[0]).abs + (a[1] - b[1]).abs + ((a[0] + a[1]) - (b[0] + b[1])).abs) / 2
     end
-    def self.move_forward!(ship)
-      delta = DIRECTIONS[ship["position"][2]]; ship["position"][0] += delta[0]; ship["position"][1] += delta[1]
-    end
-    private_class_method :move_forward!
     def self.next_roll(state)
       state["seed"] = (state["seed"].to_i * 1103515245 + 12345) % 2**31; (state["seed"] % 6) + 1
     end
@@ -316,6 +499,11 @@ module ShatteredReach
 
       raise IllegalAction, "Action is only available during #{phase}"
     end
+    def self.require_activity_step!(state, step)
+      return if state["activity_step"] == step
+
+      raise IllegalAction, "Finish the #{state["activity_step"].to_s.tr("_", " ")} step first"
+    end
     def self.available_energy(ship) = [ship["energy"] - ship["damage"]["engines"], 0].max
     def self.shield_cap(ship) = { "small" => 1, "medium" => 2, "large" => 3 }.fetch(ship["size"])
     def self.label(player) = player == "player_one" ? "Player One" : "Player Two"
@@ -325,6 +513,6 @@ module ShatteredReach
       state["winner"] = alive.first if alive.length == 1
       log!(state, "#{label(state["winner"])} wins the battle!") if state["winner"]
     end
-    private_class_method :ships_for, :owned_ship!, :require_phase!, :available_energy, :shield_cap, :label, :log!, :check_victory!
+    private_class_method :ships_for, :owned_ship!, :require_phase!, :require_activity_step!, :available_energy, :shield_cap, :label, :log!, :check_victory!
   end
 end

@@ -8,6 +8,7 @@ export function mountMatch(root) {
   let player = "player_one";
   let zoom = 1;
   let selectedShipId = null;
+  const directions = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]];
 
   const request = async (action, payload = {}) => {
     const response = await fetch(`/matches/${matchId}/action`, {
@@ -53,7 +54,8 @@ export function mountMatch(root) {
   const hex = (ship) => {
     const [q, r, facing] = ship.position; const [x, y] = center(q, r);
     const selectable = !state.solo || ship.player === player;
-    return `<g class="ship-token fleet-${ship.fleet} ${ship.destroyed ? "destroyed" : ""} ${selectable ? "selectable" : "ai-opponent"}" ${selectable ? `data-ship-id="${ship.id}" role="button" tabindex="0" aria-label="Open ${ship.name} schematic"` : `aria-label="${ship.name}, AI-controlled opponent"`} transform="translate(${x} ${y}) rotate(${120 - (facing * 60)}) scale(.86)">${shipHull(ship)}</g>`;
+    const moving = state.pending_movement?.[0] === ship.id;
+    return `<g class="ship-token fleet-${ship.fleet} ${ship.destroyed ? "destroyed" : ""} ${moving ? "movement-active" : ""} ${selectable ? "selectable" : "ai-opponent"}" ${selectable ? `data-ship-id="${ship.id}" role="button" tabindex="0" aria-label="Open ${ship.name} schematic"` : `aria-label="${ship.name}, AI-controlled opponent"`} transform="translate(${x} ${y}) rotate(${120 - (facing * 60)}) scale(.86)">${shipHull(ship)}</g>`;
   };
   const missileCounter = (missile) => {
     const [q, r, facing] = missile.position; const [x, y] = center(q, r);
@@ -64,6 +66,43 @@ export function mountMatch(root) {
   };
   const weaponName = (weapon) => weapon.type === "beam" ? "Lance beam" : weapon.type === "driver" ? "Mass driver" : "Seeker missile";
   const weaponEnergy = (weapon) => weapon.type === "beam" ? 2 : weapon.type === "driver" ? 1 : 0;
+  const axialDistance = (a, b) => (Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) + Math.abs((a[0] + a[1]) - (b[0] + b[1]))) / 2;
+  const targetInArc = (attacker, target, arcs) => {
+    const range = axialDistance(attacker.position, target.position);
+    const bearing = directions.map((delta, direction) => ({ direction, distance: axialDistance([attacker.position[0] + delta[0], attacker.position[1] + delta[1]], target.position) })).filter((entry) => entry.distance < range).map((entry) => entry.direction);
+    const offsets = { F: [-1, 0, 1], L: [1, 2, 3], A: [2, 3, 4], R: [3, 4, 5] };
+    const permitted = arcs.flatMap((arc) => (offsets[arc] || []).map((offset) => (attacker.position[2] + offset + 6) % 6));
+    return bearing.some((direction) => permitted.includes(direction));
+  };
+  const directWeaponLegal = (ship, target, weapon) => {
+    const maximumRange = weapon.type === "beam" ? 9 : 12;
+    return axialDistance(ship.position, target.position) <= maximumRange && targetInArc(ship, target, weapon.arc);
+  };
+  const currentTurnMode = (ship) => {
+    const speed = Number(ship.allocation.speed); const speedBand = speed <= 4 ? 0 : speed <= 8 ? 1 : 2;
+    return ({ small: 0, medium: 1, large: 2 }[ship.size] || 0) + speedBand;
+  };
+  const movementDestination = (ship, maneuver) => {
+    const direction = maneuver === "sideslip_left" ? (ship.position[2] + 1) % 6 : maneuver === "sideslip_right" ? (ship.position[2] + 5) % 6 : ship.position[2];
+    const delta = directions[direction];
+    return [ship.position[0] + delta[0], ship.position[1] + delta[1]];
+  };
+  const hexReference = ([q, r]) => `${String(q + 1).padStart(2, "0")}${String(r + Math.floor(q / 2) + 1).padStart(2, "0")}`;
+  const activityStrip = () => {
+    const steps = [["movement", "1 Move"], ["launch", "2 Launch"], ["fire", "3 Fire"]];
+    const order = { movement: 0, launch: 1, fire: 2 };
+    return `<div class="activity-strip">${steps.map(([step, label]) => `<span class="${state.activity_step === step ? "current" : order[state.activity_step] > order[step] ? "done" : ""}">${label}</span>`).join("")}</div>`;
+  };
+  const movementChoices = () => {
+    if (state.activity_step !== "movement") return "";
+    const movingShip = state.ships.find((ship) => ship.id === state.pending_movement?.[0]);
+    if (!movingShip || movingShip.player !== player) return "";
+    return (state.movement_options || []).filter((maneuver) => ["forward", "sideslip_left", "sideslip_right"].includes(maneuver)).map((maneuver) => {
+      const destination = movementDestination(movingShip, maneuver); const [x, y] = center(...destination);
+      const label = maneuver === "forward" ? "FORWARD" : maneuver === "sideslip_left" ? "PORT" : "STARBOARD";
+      return `<g class="movement-choice" data-maneuver="${maneuver}" role="button" tabindex="0" aria-label="${label} to hex ${hexReference(destination)}"><polygon points="${polygon(x, y, hexSize - 3)}"/><text x="${x}" y="${y - 2}">${label}</text><text class="destination-reference" x="${x}" y="${y + 10}">${hexReference(destination)}</text></g>`;
+    }).join("");
+  };
   const weaponChoices = (ship) => ship.weapons.filter((weapon) => weapon.type !== "missile" && !weapon.destroyed).map((weapon) => `
     <label class="weapon-allocation">
       <input type="checkbox" value="${weapon.id}" data-energy="${weaponEnergy(weapon)}" ${ship.allocation.weapons.includes(weapon.id) ? "checked" : ""}>
@@ -73,8 +112,22 @@ export function mountMatch(root) {
   const controls = (ship, target) => {
     if (state.winner) return `<a class="button" href="/">Return to fleet selection</a>`;
     if (state.phase === "allocation") { const shieldCap = ship.size === "small" ? 1 : ship.size === "medium" ? 2 : 3; return `<div class="control-stack"><label>Speed <output id="speed-value">${ship.allocation.speed}</output><input id="speed" type="range" min="0" max="12" value="${ship.allocation.speed}"></label><fieldset class="shield-allocation-list"><legend>Shield reinforcement</legend><label>Forward <output id="front-shields-value">${ship.allocation.shields.front}</output><input id="front-shields" type="range" min="0" max="${ship.shields.front > 0 ? shieldCap : 0}" value="${ship.allocation.shields.front}"></label><label>Aft <output id="aft-shields-value">${ship.allocation.shields.aft}</output><input id="aft-shields" type="range" min="0" max="${ship.shields.aft > 0 ? shieldCap : 0}" value="${ship.allocation.shields.aft}"></label></fieldset><fieldset class="weapon-allocation-list"><legend>Weapon circuits</legend>${weaponChoices(ship)}</fieldset><div class="allocation-budget"><span>Energy committed</span><b><output id="energy-used">0</output> / ${ship.energy - ship.damage.engines}</b></div><p class="allocation-help"><b>Save draft</b> stores this plan but keeps it editable. <b>Commit allocation</b> saves the current plan and makes it final for this turn${state.solo ? "; the AI then commits its own plan" : ""}.</p><button class="secondary save-allocation">Save draft</button><button class="primary commit-allocation">Commit allocation</button></div>`; }
-    const weaponActions = state.impulse > 0 && target ? ship.weapons.filter((w) => !w.destroyed && !w.fired && (w.type === "missile" ? w.ammo > 0 : ship.allocation.weapons.includes(w.id))).map((w) => `<button class="secondary fire" data-weapon="${w.id}">${w.type === "missile" ? "Launch" : "Fire"} ${w.mount ? `${w.mount} ` : ""}${weaponName(w)} at ${target.name}</button>`).join("") : "";
-    return `<div class="control-stack"><button class="primary advance">Draw next impulse</button>${weaponActions}${ship.special_available ? `<button class="secondary special">Emergency power maneuver</button>` : ""}</div>`;
+    if (state.activity_step === "draw") return `<div class="control-stack">${activityStrip()}<p class="step-help">Draw the next card to discover which speeds receive a movement opportunity.</p><button class="primary advance">${state.impulse === 0 ? "Draw first impulse" : "Draw next impulse"}</button></div>`;
+    if (state.activity_step === "movement") {
+      const movingShip = state.ships.find((entry) => entry.id === state.pending_movement?.[0]);
+      if (!movingShip || movingShip.player !== player) return `<div class="control-stack">${activityStrip()}<p class="step-callout"><b>${movingShip?.name || "Another ship"}</b> moves next.</p><p class="step-help">${state.solo ? "Command AI is resolving its maneuver." : "Pass command and use the player switch above."}</p></div>`;
+      const labels = { forward: "Move forward", sideslip_left: "Side-slip port", sideslip_right: "Side-slip starboard", turn_left: "Turn 60° port", turn_right: "Turn 60° starboard", lose_movement: "Lose blocked movement" };
+      const options = (state.movement_options || []).map((maneuver) => `<button class="${maneuver === "forward" ? "primary" : "secondary"} move-ship" data-maneuver="${maneuver}">${labels[maneuver]}</button>`).join("");
+      const special = movingShip.special_available ? `<details class="special-maneuvers"><summary>Use one-time special maneuver</summary><button class="secondary special" data-special="emergency_power">Emergency power · extra forward move</button><button class="secondary special" data-special="quick_stop">Quick stop · speed zero</button><label>Bootlegger heading<select id="bootlegger-facing">${["East", "Northeast", "Northwest", "West", "Southwest", "Southeast"].map((label, direction) => `<option value="${direction}" ${movingShip.position[2] === direction ? "selected" : ""}>${label}</option>`).join("")}</select></label><button class="secondary bootlegger">Bootlegger · rotate freely</button></details>` : "";
+      return `<div class="control-stack">${activityStrip()}<p class="step-callout"><b>${movingShip.name}</b> has a movement opportunity.</p><p class="step-help">Choose one highlighted destination or turn in place. Turn mode ${currentTurnMode(movingShip)}: ${movingShip.movement?.hexes_since_turn || 0} forward hexes accumulated.</p><div class="impulse-card"><span>Movement card</span><b>${(state.impulse_card || []).join(" · ")}</b></div>${options}${special}</div>`;
+    }
+    if (state.activity_step === "launch") {
+      const launchers = target ? ship.weapons.filter((weapon) => weapon.type === "missile" && !weapon.destroyed && !weapon.fired && weapon.ammo > 0) : [];
+      return `<div class="control-stack">${activityStrip()}<p class="step-help">Existing missiles have moved. Launch any new missiles now; they remain in your hex until the next impulse.</p>${launchers.map((weapon) => `<button class="secondary launch-missile" data-weapon="${weapon.id}">Launch ${weapon.mount || "M"} seeker missile at ${target.name} · ${weapon.ammo} remaining</button>`).join("")}<button class="primary finish-launches">${launchers.length ? "Finish missile launches" : "Continue to weapons fire"}</button></div>`;
+    }
+    const legalWeapons = target ? ship.weapons.filter((weapon) => weapon.type !== "missile" && !weapon.destroyed && !weapon.fired && ship.allocation.weapons.includes(weapon.id) && directWeaponLegal(ship, target, weapon)) : [];
+    const remainingPowered = ship.weapons.filter((weapon) => weapon.type !== "missile" && !weapon.destroyed && !weapon.fired && ship.allocation.weapons.includes(weapon.id));
+    return `<div class="control-stack">${activityStrip()}<p class="step-help">Fire any powered weapon with a legal range and arc, then end the impulse.</p>${legalWeapons.map((weapon) => `<button class="secondary fire" data-weapon="${weapon.id}">Fire ${weapon.mount ? `${weapon.mount} ` : ""}${weaponName(weapon)} · Arc ${weapon.arc.join("/")}<small>Target: ${target.name} · Range ${axialDistance(ship.position, target.position)}</small></button>`).join("")}${legalWeapons.length ? "" : `<p class="no-legal-action">${remainingPowered.length ? "No powered weapon currently has both range and firing arc." : "No unfired direct weapon is powered this turn."}</p>`}<button class="primary finish-impulse">${state.impulse >= 12 ? "End turn" : "End impulse"}</button></div>`;
   };
   const bind = (ship, target) => {
     root.querySelector(".switch-player")?.addEventListener("click", () => { if (!state.solo) { player = player === "player_one" ? "player_two" : "player_one"; render(); } });
@@ -98,8 +151,14 @@ export function mountMatch(root) {
     root.querySelector(".save-allocation")?.addEventListener("click", () => request("allocate", allocationPayload()));
     root.querySelector(".commit-allocation")?.addEventListener("click", async () => { if (await request("allocate", allocationPayload())) await request("lock_allocation"); });
     root.querySelector(".advance")?.addEventListener("click", () => request("advance_impulse"));
+    root.querySelectorAll(".move-ship, .movement-choice").forEach((button) => button.addEventListener("click", () => request("move_ship", { ship_id: state.pending_movement[0], maneuver: button.dataset.maneuver })));
+    root.querySelectorAll(".movement-choice").forEach((button) => button.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); request("move_ship", { ship_id: state.pending_movement[0], maneuver: button.dataset.maneuver }); } }));
+    root.querySelectorAll(".launch-missile").forEach((button) => button.addEventListener("click", () => request("launch_missile", { ship_id: ship.id, target_id: target.id, weapon_id: button.dataset.weapon })));
+    root.querySelector(".finish-launches")?.addEventListener("click", () => request("finish_launches"));
     root.querySelectorAll(".fire").forEach((button) => button.addEventListener("click", () => request("fire", { ship_id: ship.id, target_id: target.id, weapon_id: button.dataset.weapon })));
-    root.querySelector(".special")?.addEventListener("click", () => request("special", { ship_id: ship.id, maneuver: "emergency_power" }));
+    root.querySelector(".finish-impulse")?.addEventListener("click", () => request("finish_impulse"));
+    root.querySelectorAll(".special").forEach((button) => button.addEventListener("click", () => request("special", { ship_id: state.pending_movement[0], maneuver: button.dataset.special })));
+    root.querySelector(".bootlegger")?.addEventListener("click", () => request("special", { ship_id: state.pending_movement[0], maneuver: "bootlegger", direction: root.querySelector("#bootlegger-facing").value }));
     const openSchematic = (element) => {
       selectedShipId = element.dataset.shipId;
       render();
@@ -146,10 +205,12 @@ export function mountMatch(root) {
     const current = mine(); const target = enemy();
     const selectedShip = state.ships.find((ship) => ship.id === selectedShipId && (!state.solo || ship.player === player));
     const identity = state.solo ? `<div class="solo-identity"><span>You command</span><b>${current?.name || "Fleet destroyed"}</b></div>` : `<button class="switch-player">Viewing: ${player === "player_one" ? "Player One" : "Player Two"}</button>`;
+    const activityLabel = { draw: "Awaiting movement card", movement: "Movement phase", launch: "Missile launch phase", fire: "Direct fire phase" }[state.activity_step];
+    const commandTitle = state.phase === "allocation" ? "Commit your energy" : { draw: "Draw the next impulse", movement: "Choose your maneuver", launch: "Launch missiles", fire: "Resolve weapons fire" }[state.activity_step] || "Command the engagement";
     root.innerHTML = `
-      <header class="game-header"><a href="/" class="wordmark">THE <strong>SHATTERED</strong> REACH</a><div class="turn-state"><span>TURN ${state.turn}</span><b>${state.winner ? `${state.winner === "player_one" ? "Player One" : "Player Two"} wins` : state.phase === "allocation" ? "Secret allocation" : `Impulse ${state.impulse} · ${state.initiative === player ? "You hold initiative" : "Opponent holds initiative"}`}</b></div>${identity}</header>
-      <main class="match-layout"><section class="command-panel"><p class="eyebrow">${state.solo ? `Solo command · Your ship: ${current?.name}` : state.scenario === "tutorial" ? `Tutorial · ${["Set the battle plan", "Reveal allocations", "Watch an impulse", "Fire your first weapon"][state.tutorial_step] || "Continue the engagement"}` : "Fleet command"}</p><h1>${state.phase === "allocation" ? "Commit your energy" : "Command the engagement"}</h1><p class="quiet">${state.log.at(-1)}</p>${current ? controls(current, target) : ""}</section>
-      <section class="battlefield"><div class="nebula"></div><div class="zoom-controls" aria-label="Battlefield zoom"><button class="zoom-out" aria-label="Zoom out">−</button><button class="zoom-reset" aria-label="Reset zoom">${Math.round(zoom * 100)}%</button><button class="zoom-in" aria-label="Zoom in">+</button></div><svg viewBox="0 0 ${boardWidth} ${boardHeight}" aria-label="${boardSize} by ${boardSize} tactical flat-top hex battlefield" style="width:${zoom * 100}%;max-width:none">${grid()}${state.ships.map(hex).join("")}${(state.missiles || []).map(missileCounter).join("")}</svg><div class="battlefield-label">Tactical display · ${boardSize} × ${boardSize} · numbered flat-top hex grid</div></section>
+      <header class="game-header"><a href="/" class="wordmark">THE <strong>SHATTERED</strong> REACH</a><div class="turn-state"><span>TURN ${state.turn}${state.phase === "impulse" ? ` · IMPULSE ${state.impulse}` : ""}</span><b>${state.winner ? `${state.winner === "player_one" ? "Player One" : "Player Two"} wins` : state.phase === "allocation" ? "Secret allocation" : activityLabel}</b></div>${identity}</header>
+      <main class="match-layout"><section class="command-panel"><p class="eyebrow">${state.solo ? `Solo command · Your ship: ${current?.name}` : state.scenario === "tutorial" ? `Tutorial · ${["Set the battle plan", "Reveal allocations", "Choose a maneuver", "Fire your first weapon"][state.tutorial_step] || "Continue the engagement"}` : "Fleet command"}</p><h1>${commandTitle}</h1><p class="quiet">${state.log.at(-1)}</p>${current ? controls(current, target) : ""}</section>
+      <section class="battlefield"><div class="nebula"></div><div class="zoom-controls" aria-label="Battlefield zoom"><button class="zoom-out" aria-label="Zoom out">−</button><button class="zoom-reset" aria-label="Reset zoom">${Math.round(zoom * 100)}%</button><button class="zoom-in" aria-label="Zoom in">+</button></div><svg viewBox="0 0 ${boardWidth} ${boardHeight}" aria-label="${boardSize} by ${boardSize} tactical flat-top hex battlefield" style="width:${zoom * 100}%;max-width:none">${grid()}${movementChoices()}${state.ships.map(hex).join("")}${(state.missiles || []).map(missileCounter).join("")}</svg><div class="battlefield-label">Tactical display · ${boardSize} × ${boardSize} · numbered flat-top hex grid</div></section>
       <aside class="fleet-status"><h2>Fleet status</h2><p class="fleet-status-hint">${state.solo ? "Your ship is selectable; the opposing ship is controlled by the AI." : "Select a ship for its combat schematic."}</p>${state.ships.map(shipCard).join("")}</aside></main>${selectedShip ? shipSchematic(selectedShip, state, player) : ""}`;
     bind(current, target);
   };

@@ -29,19 +29,58 @@ module ShatteredReach
 
       range = RulesEngine.distance(ship["position"], target["position"])
       weapon = ship["weapons"].find do |candidate|
-        next if candidate["destroyed"] || candidate["fired"]
-        next if candidate["type"] == "missile" && candidate["ammo"].to_i <= 0
-        next unless candidate["type"] == "missile" || ship.dig("allocation", "weapons").include?(candidate["id"])
+        next if candidate["destroyed"] || candidate["fired"] || candidate["type"] == "missile"
+        next unless ship.dig("allocation", "weapons").include?(candidate["id"])
 
-        GameDefinition::WEAPONS.fetch(candidate["type"])[:ranges].any? { |limit| range <= limit }
+        GameDefinition::WEAPONS.fetch(candidate["type"])[:ranges].any? { |limit| range <= limit } &&
+          RulesEngine.send(:target_in_arc?, ship, target, candidate["arc"])
       end
       if weapon
         return { action: "fire", payload: { "ship_id" => ship["id"], "target_id" => target["id"], "weapon_id" => weapon["id"] } }
       end
 
-      return unless ship["special_available"]
+      nil
+    end
 
-      { action: "special", payload: { "ship_id" => ship["id"], "maneuver" => "emergency_power" } }
+    def self.missile_action(state, player)
+      ship = state.fetch("ships").find { |entry| entry["player"] == player && !entry["destroyed"] }
+      target = state.fetch("ships").find { |entry| entry["player"] != player && !entry["destroyed"] }
+      return unless ship && target
+
+      weapon = ship["weapons"].find do |candidate|
+        candidate["type"] == "missile" && !candidate["destroyed"] && !candidate["fired"] && candidate["ammo"].to_i.positive?
+      end
+      return unless weapon
+
+      { action: "launch_missile", payload: { "ship_id" => ship["id"], "target_id" => target["id"], "weapon_id" => weapon["id"] } }
+    end
+
+    def self.movement_action(state, player)
+      ship_id = state.fetch("pending_movement").first
+      ship = state.fetch("ships").find { |entry| entry["id"] == ship_id && entry["player"] == player && !entry["destroyed"] }
+      target = state.fetch("ships").find { |entry| entry["player"] != player && !entry["destroyed"] }
+      return unless ship && target
+
+      options = state.fetch("movement_options")
+      translations = options & %w[forward sideslip_left sideslip_right]
+      maneuver = translations.min_by do |candidate|
+        direction = case candidate
+                    when "sideslip_left" then (ship["position"][2] + 1) % 6
+                    when "sideslip_right" then (ship["position"][2] - 1) % 6
+                    else ship["position"][2]
+                    end
+        delta = RulesEngine::DIRECTIONS[direction]
+        RulesEngine.distance([ship["position"][0] + delta[0], ship["position"][1] + delta[1]], target["position"])
+      end
+      maneuver ||= (options & %w[turn_left turn_right]).min_by do |candidate|
+        facing = (ship["position"][2] + (candidate == "turn_left" ? 1 : -1)) % 6
+        delta = RulesEngine::DIRECTIONS[facing]
+        RulesEngine.distance([ship["position"][0] + delta[0], ship["position"][1] + delta[1]], target["position"])
+      end
+      maneuver ||= options.first
+      return unless maneuver
+
+      { action: "move_ship", payload: { "ship_id" => ship["id"], "maneuver" => maneuver } }
     end
   end
 end
