@@ -7,6 +7,12 @@ class MatchesControllerTest < ActionDispatch::IntegrationTest
     get root_url
     assert_response :success
     assert_select "h1", /SHATTERED/
+    assert_select "button[data-open-dialog='new-game-dialog']", text: "New game"
+    assert_select "button[data-open-dialog='load-game-dialog']", text: "Load game"
+    assert_select "dialog#new-game-dialog [data-setup-step='1']"
+    assert_select "dialog#new-game-dialog [data-setup-step='2'][hidden]"
+    assert_select "[data-ai-options][hidden] input", count: 2
+    assert_select "dialog#load-game-dialog form.load-game-form"
     ShatteredReach::GameDefinition::SHIPS.each_value do |ship|
       assert_select "option", text: /#{Regexp.escape(ship[:name].split.last)}/
     end

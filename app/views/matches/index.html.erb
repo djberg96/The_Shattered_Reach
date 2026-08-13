@@ -1,5 +1,8 @@
 <% content_for :title, "The Shattered Reach" %>
-<main class="landing">
+<% ship_options = ShatteredReach::GameDefinition::SHIPS.map { |key, ship| ["#{ShatteredReach::GameDefinition::FLEETS.fetch(ship[:fleet])[:name]} · #{ship[:name].delete_prefix("#{ShatteredReach::GameDefinition::FLEETS.fetch(ship[:fleet])[:name].split.first} ")} · #{ship[:size].capitalize}", key] } %>
+<% optional_ship_options = [["No ship", ""]] + ship_options %>
+
+<main class="landing" data-landing>
   <% if notice.present? || alert.present? %><div class="flash-message <%= alert.present? ? "error" : "success" %>" role="status"><%= alert || notice %></div><% end %>
   <section class="hero">
     <div class="hero-art" style="background-image: linear-gradient(90deg, rgba(5,7,20,.84) 0%, rgba(5,7,20,.32) 75%), url('<%= asset_path("shattered_reach/key-art.png") %>')"></div>
@@ -7,40 +10,135 @@
       <p class="eyebrow">A tactical space-combat prototype</p>
       <h1>THE <em>SHATTERED</em> REACH</h1>
       <p class="lede">Commit power in secret. Read the impulse. Break the enemy fleet before it breaks you.</p>
-      <%= form_with url: matches_path, class: "launch-form", data: { turbo: false } do |form| %>
-        <% ship_options = ShatteredReach::GameDefinition::SHIPS.map { |key, ship| ["#{ShatteredReach::GameDefinition::FLEETS.fetch(ship[:fleet])[:name]} · #{ship[:name].delete_prefix("#{ShatteredReach::GameDefinition::FLEETS.fetch(ship[:fleet])[:name].split.first} ")} · #{ship[:size].capitalize}", key] } %>
-        <div class="skirmish-options">
-          <label>Battlefield size<%= form.select :board_size, [["12 × 12", 12], ["15 × 15", 15], ["20 × 20", 20]], selected: 15 %></label>
-          <fieldset class="fleet-builder player-one"><legend>Your fleet · up to three ships</legend>
-            <%= select_tag "player_one_ships[]", options_for_select(ship_options, "aurelian_cruiser"), aria: { label: "Your first ship" } %>
-            <%= select_tag "player_one_ships[]", options_for_select([["No ship", ""]] + ship_options), aria: { label: "Your second ship" } %>
-            <%= select_tag "player_one_ships[]", options_for_select([["No ship", ""]] + ship_options), aria: { label: "Your third ship" } %>
-          </fieldset>
-          <fieldset class="fleet-builder player-two"><legend>Hot-seat opponent fleet</legend>
-            <%= select_tag "player_two_ships[]", options_for_select(ship_options, "kestrel_cruiser"), aria: { label: "Opponent first ship" } %>
-            <%= select_tag "player_two_ships[]", options_for_select([["No ship", ""]] + ship_options), aria: { label: "Opponent second ship" } %>
-            <%= select_tag "player_two_ships[]", options_for_select([["No ship", ""]] + ship_options), aria: { label: "Opponent third ship" } %>
-          </fieldset>
-          <label>AI balancing<%= form.select :ai_match, [["Match total size value", "size"], ["Match ship count", "number"]], selected: "size" %></label>
-        </div>
-        <div class="launch-actions">
-          <%= form.button "Begin a skirmish", name: :mode, value: :hotseat, class: "primary" %>
-          <%= form.button "Fight the command AI", name: :mode, value: :solo, class: "secondary" %>
-          <%= form.button "Play the guided tutorial", name: :mode, value: :tutorial, class: "secondary" %>
-        </div>
-      <% end %>
+      <div class="launch-actions landing-actions">
+        <button type="button" class="primary" data-open-dialog="new-game-dialog">New game</button>
+        <button type="button" class="secondary" data-open-dialog="load-game-dialog">Load game</button>
+      </div>
     </div>
   </section>
+
+  <dialog id="new-game-dialog" class="game-dialog setup-dialog" aria-labelledby="new-game-title" data-game-setup>
+    <div class="dialog-frame">
+      <button type="button" class="dialog-close" aria-label="Close new game setup" data-close-dialog>×</button>
+      <%= form_with url: matches_path, class: "launch-form", data: { turbo: false } do |form| %>
+        <header class="dialog-heading">
+          <p class="eyebrow">New game · Step <span data-step-number>1</span> of 2</p>
+          <h2 id="new-game-title" data-step-heading>Choose your battle</h2>
+          <p data-step-description>Select a command mode and the dimensions of the battlefield.</p>
+        </header>
+
+        <section class="setup-step" data-setup-step="1">
+          <fieldset class="setup-fieldset">
+            <legend>Battle type</legend>
+            <div class="battle-type-grid">
+              <label class="setup-choice">
+                <input type="radio" name="mode" value="hotseat" checked>
+                <span><strong>Hot-seat skirmish</strong><small>Two commanders share this screen and conceal their allocations.</small></span>
+              </label>
+              <label class="setup-choice">
+                <input type="radio" name="mode" value="solo">
+                <span><strong>Fight the command AI</strong><small>Lead your fleet against an automatically balanced enemy force.</small></span>
+              </label>
+              <label class="setup-choice">
+                <input type="radio" name="mode" value="tutorial">
+                <span><strong>Guided tutorial</strong><small>Learn energy, movement, weapons, shields, and damage in First Light.</small></span>
+              </label>
+            </div>
+          </fieldset>
+
+          <fieldset class="setup-fieldset">
+            <legend>Battlefield size</legend>
+            <div class="map-size-grid">
+              <% [[12, "Close quarters"], [15, "Standard engagement"], [20, "Deep-space maneuver"]].each do |size, description| %>
+                <label class="map-size-choice">
+                  <%= form.radio_button :board_size, size, checked: size == 15 %>
+                  <span><strong><%= size %> × <%= size %></strong><small><%= description %></small></span>
+                </label>
+              <% end %>
+            </div>
+          </fieldset>
+
+          <footer class="dialog-actions">
+            <button type="button" class="primary" data-next-setup>Continue to fleet selection</button>
+          </footer>
+        </section>
+
+        <section class="setup-step" data-setup-step="2" hidden>
+          <div data-custom-deployment>
+            <fieldset class="setup-fieldset fleet-builder player-one" data-player-fleet>
+              <legend>Your fleet · one to three ships</legend>
+              <%= select_tag "player_one_ships[]", options_for_select(ship_options, "aurelian_cruiser"), aria: { label: "Your first ship" } %>
+              <%= select_tag "player_one_ships[]", options_for_select(optional_ship_options), aria: { label: "Your second ship" } %>
+              <%= select_tag "player_one_ships[]", options_for_select(optional_ship_options), aria: { label: "Your third ship" } %>
+            </fieldset>
+
+            <fieldset class="setup-fieldset fleet-builder player-two" data-hotseat-options>
+              <legend>Opponent fleet · one to three ships</legend>
+              <%= select_tag "player_two_ships[]", options_for_select(ship_options, "kestrel_cruiser"), aria: { label: "Opponent first ship" } %>
+              <%= select_tag "player_two_ships[]", options_for_select(optional_ship_options), aria: { label: "Opponent second ship" } %>
+              <%= select_tag "player_two_ships[]", options_for_select(optional_ship_options), aria: { label: "Opponent third ship" } %>
+            </fieldset>
+
+            <fieldset class="setup-fieldset ai-balance-options" data-ai-options hidden>
+              <legend>Command AI balancing</legend>
+              <label class="setup-choice compact">
+                <%= form.radio_button :ai_match, "size", checked: true, disabled: true %>
+                <span><strong>Match fleet strength</strong><small>The AI fields ships with the same total size value.</small></span>
+              </label>
+              <label class="setup-choice compact">
+                <%= form.radio_button :ai_match, "number", disabled: true %>
+                <span><strong>Match ship count</strong><small>The AI fields the same number of ships, regardless of class.</small></span>
+              </label>
+            </fieldset>
+          </div>
+
+          <div class="tutorial-deployment" data-tutorial-options hidden>
+            <p class="eyebrow">Fixed training deployment</p>
+            <h3>First Light</h3>
+            <p>The tutorial supplies a pair of frigates and reveals one system at a time. Your battlefield-size selection still applies.</p>
+          </div>
+
+          <footer class="dialog-actions split-actions">
+            <button type="button" class="secondary" data-previous-setup>Back</button>
+            <%= form.submit "Begin skirmish", class: "primary", data: { begin_game: true } %>
+          </footer>
+        </section>
+      <% end %>
+    </div>
+  </dialog>
+
+  <dialog id="load-game-dialog" class="game-dialog load-dialog" aria-labelledby="load-game-title">
+    <div class="dialog-frame">
+      <button type="button" class="dialog-close" aria-label="Close load game" data-close-dialog>×</button>
+      <header class="dialog-heading">
+        <p class="eyebrow">Local command archive</p>
+        <h2 id="load-game-title">Load game</h2>
+        <p>Open a downloaded save file or resume a battle stored in this browser.</p>
+      </header>
+      <%= form_with url: import_matches_path, multipart: true, class: "load-game-form", data: { turbo: false } do |form| %>
+        <%= form.label :save_file, "Saved-game file" %>
+        <%= form.file_field :save_file, accept: ".json,application/json", required: true %>
+        <%= form.submit "Load file", class: "secondary" %>
+      <% end %>
+      <% if @matches.any? %>
+        <div class="resume-list">
+          <% @matches.each do |match| %>
+            <%= link_to match, class: "resume-match" do %>
+              <span><%= match.title %></span>
+              <small>Turn <%= match.state["turn"] %> · <%= match.updated_at.strftime("%b %-d, %H:%M") %></small>
+            <% end %>
+          <% end %>
+        </div>
+      <% else %>
+        <p class="archive-empty">No local battles are waiting to be resumed.</p>
+      <% end %>
+    </div>
+  </dialog>
 
   <section class="fleet-intro">
     <div><p class="eyebrow">Three powers. One frontier.</p><h2>Choose your doctrine.</h2></div>
     <article class="fleet-card aurelian" style="background-image: linear-gradient(0deg, rgba(11,16,39,.96), rgba(11,16,39,.1)), url('<%= asset_path("shattered_reach/aurelian-lineup.png") %>')"><h3>Aurelian Compact</h3><p>Elegant beam craft and composed formation fighting.</p></article>
     <article class="fleet-card veyr" style="background-image: linear-gradient(0deg, rgba(11,16,39,.96), rgba(11,16,39,.1)), url('<%= asset_path("shattered_reach/veyr-lineup.png") %>')"><h3>Veyr Dominion</h3><p>Relentless mass drivers and long-reaching missiles.</p></article>
     <article class="fleet-card kestrel" style="background-image: linear-gradient(0deg, rgba(11,16,39,.96), rgba(11,16,39,.1)), url('<%= asset_path("shattered_reach/kestrel-lineup.png") %>')"><h3>Kestrel Freeholds</h3><p>Hardy industrial warships with flexible loadouts.</p></article>
-  </section>
-
-  <section class="resume command-archive">
-    <div class="archive-heading"><div><p class="eyebrow">Local command archive</p><h2><%= @matches.any? ? "Resume a battle" : "Load a battle" %></h2></div><%= form_with url: import_matches_path, multipart: true, class: "load-game-form", data: { turbo: false } do |form| %><%= form.label :save_file, "Load saved game" %><%= form.file_field :save_file, accept: ".json,application/json", required: true %><%= form.submit "Load game", class: "secondary" %><% end %></div>
-    <% if @matches.any? %><div class="resume-list"><% @matches.each do |match| %><%= link_to match, class: "resume-match" do %><span><%= match.title %></span><small>Turn <%= match.state["turn"] %> · <%= match.updated_at.strftime("%b %-d, %H:%M") %></small><% end %><% end %></div><% else %><p class="archive-empty">Start a new battle above or load a previously downloaded save file.</p><% end %>
   </section>
 </main>
