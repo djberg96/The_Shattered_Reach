@@ -2,6 +2,13 @@
 
 A private Ruby on Rails prototype for tactical, turn-based space combat. It is a faithful digital refresh of the original tabletop design: players secretly allocate energy, resolve twelve semi-random movement impulses, and fight over a hex map with shields, firing arcs, weapons, missiles, and subsystem damage.
 
+This was a prototype I created in 2014 or so that I decided to dust off. It is loosely based on games like Star Fleet Battles and Galactic Civilizations. It was originally called "Micro Space Empire Battles" as a nod to Robert Bartelli's game "Micro Space Empire", with the idea that it would be based in his universe, though nothing ever came of it.
+
+These days I would probably just play Starmada or SFB if you're in the mood for something deeper, but this can be fun if you're looking for something quick and light.
+
+## Installation
+You will need to install the Ruby programming language and the Rails web framework.
+
 ## Run it
 
 Requires your rbenv-managed Ruby and Bundler.
@@ -31,3 +38,12 @@ The latter command generates `docs/rulebook/build/the-shattered-reach-rulebook.p
 - `app/assets/images/shattered_reach/` contains cinematic fleet and key-art illustrations.
 
 The prototype deliberately excludes accounts, remote multiplayer, payments, and mobile layouts.
+
+## Author
+Daniel J. Berger
+
+## Copyright
+Copright 2026, All Rights Reserved
+
+## License
+MIT
