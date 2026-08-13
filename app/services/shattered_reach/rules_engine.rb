@@ -47,6 +47,23 @@ module ShatteredReach
       }
     end
 
+    def self.restart(state)
+      current = Marshal.load(Marshal.dump(state))
+      normalize!(current)
+      fleets = current.fetch("ships").reject { |ship| ship["destroyed"] && ship["key"].blank? }
+                      .group_by { |ship| ship.fetch("player") }
+                      .transform_values { |ships| ships.sort_by { |ship| ship["fleet_index"].to_i }.map { |ship| ship.fetch("key") } }
+      fresh = start(
+        scenario: current.fetch("scenario", "skirmish").to_sym,
+        solo: false,
+        board_size: current.fetch("board_size", 15),
+        player_one_ships: fleets["player_one"],
+        player_two_ships: fleets["player_two"]
+      )
+      fresh["solo"] = current["solo"] == true
+      fresh
+    end
+
     def self.normalize_fleet_selection(selection, fallback)
       selected = Array(selection).map(&:to_s).reject(&:blank?)
       selected = fallback if selected.empty?

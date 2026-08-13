@@ -15,6 +15,8 @@ export function mountMatch(root) {
   let soundEnabled = window.localStorage.getItem("shattered-reach-sound") !== "muted";
   let movementLinesVisible = window.localStorage.getItem("shattered-reach-movement-lines") !== "hidden";
   let fleetStatusCollapsed = window.localStorage.getItem("shattered-reach-fleet-status") === "collapsed";
+  let gameMenuOpen = false;
+  let gameConfirmation = null;
   let audioContext = null;
   let combatEffectPlaying = false;
   const combatEffectQueue = [];
@@ -285,6 +287,16 @@ export function mountMatch(root) {
       <button class="primary dismiss-impulse">${state.activity_step === "movement" ? "Continue to movement" : "Continue to missile launch"}</button>
     </section></div>`;
   };
+  const gameConfirmationModal = () => {
+    if (!gameConfirmation) return "";
+    const resetting = gameConfirmation === "reset";
+    return `<div class="game-confirmation-backdrop" role="presentation"><section class="game-confirmation" role="dialog" aria-modal="true" aria-labelledby="game-confirmation-title" aria-describedby="game-confirmation-description">
+      <p class="eyebrow">${resetting ? "Reset battle" : "Exit battle"}</p>
+      <h2 id="game-confirmation-title">Are you sure?</h2>
+      <p id="game-confirmation-description">${resetting ? "This returns every ship to its starting position and discards all progress in this battle." : "Any progress since your last downloaded save will remain only in this browser's local battle archive."}</p>
+      <div class="game-confirmation-actions"><button class="secondary cancel-game-action">Cancel</button><button class="${resetting ? "danger" : "primary"} confirm-game-action">${resetting ? "Reset battle" : "Exit to title"}</button></div>
+    </section></div>`;
+  };
   const movementChoices = () => {
     if (state.activity_step !== "movement") return "";
     const movingShip = state.ships.find((ship) => ship.id === state.pending_movement?.[0]);
@@ -335,6 +347,17 @@ export function mountMatch(root) {
     return `<div class="control-stack">${activityStrip()}<p class="step-help">${selectedWeapon ? `Now hover over an enemy ship or missile to inspect the shot, then click a legal target to fire ${selectedWeapon.mount || weaponName(selectedWeapon)}.` : "Select a powered weapon, then choose an enemy ship or missile on the battlefield."}</p>${poweredWeapons.map((weapon) => `<button class="secondary select-weapon ${weapon.id === selectedWeaponId ? "selected" : ""}" data-weapon="${weapon.id}">${weapon.id === selectedWeaponId ? "Selected" : "Select"} ${weapon.mount ? `${weapon.mount} ` : ""}${weaponName(weapon)} · Arc ${weapon.arc.join("/")}<small>${weapon.id === selectedWeaponId ? "Choose an enemy ship or missile" : `${weaponEnergy(weapon)} energy · unfired`}</small></button>`).join("")}${poweredWeapons.length ? "" : `<p class="no-legal-action">No unfired direct weapon is powered this turn.</p>`}${selectedWeapon ? `<button class="secondary cancel-weapon">Cancel target selection</button>` : ""}<button class="primary finish-impulse">${state.impulse >= 12 ? "End turn" : "End impulse"}</button></div>`;
   };
   const bind = (ship, target) => {
+    root.querySelector(".game-menu-toggle")?.addEventListener("click", () => { gameMenuOpen = !gameMenuOpen; render(); root.querySelector(gameMenuOpen ? ".game-menu-item" : ".game-menu-toggle")?.focus(); });
+    root.querySelector(".reset-game")?.addEventListener("click", () => { gameMenuOpen = false; gameConfirmation = "reset"; render(); root.querySelector(".cancel-game-action")?.focus(); });
+    root.querySelector(".exit-game")?.addEventListener("click", () => { gameMenuOpen = false; gameConfirmation = "exit"; render(); root.querySelector(".cancel-game-action")?.focus(); });
+    root.querySelector(".cancel-game-action")?.addEventListener("click", () => { gameConfirmation = null; render(); root.querySelector(".game-menu-toggle")?.focus(); });
+    root.querySelector(".game-confirmation-backdrop")?.addEventListener("click", (event) => { if (event.target === event.currentTarget) { gameConfirmation = null; render(); } });
+    root.querySelector(".confirm-game-action")?.addEventListener("click", async () => {
+      if (gameConfirmation === "exit") { window.location.assign("/"); return; }
+      const response = await fetch(`/matches/${matchId}/reset`, { method: "POST", headers: { "X-CSRF-Token": csrf(), "Accept": "application/json" } });
+      if (!response.ok) { window.alert("The battle could not be reset."); return; }
+      window.location.assign(`/matches/${matchId}`);
+    });
     const allocationPayload = () => ({ ship_id: ship.id, speed: root.querySelector("#speed").value, front_shields: root.querySelector("#front-shields").value, aft_shields: root.querySelector("#aft-shields").value, shield_repair: root.querySelector("#shield-repair").value, weapons: [...root.querySelectorAll(".weapon-allocation input:checked")].map((input) => input.value) });
     const saveCurrentAllocation = async () => {
       if (state.phase !== "allocation" || !ship || ship.locked) return true;
@@ -529,10 +552,10 @@ export function mountMatch(root) {
     const commandTitle = state.phase === "allocation" ? "Allocate Energy" : state.activity_step === "draw" && state.impulse === 11 ? "Draw the last impulse" : { draw: "Draw the next impulse", movement: "Choose your maneuver", launch: "Launch missiles", fire: "Resolve weapons fire" }[state.activity_step] || "Command the engagement";
     const commandLog = state.phase === "allocation" ? "" : `<p class="quiet">${state.log.at(-1)}</p>`;
     root.innerHTML = `
-      <header class="game-header"><a href="/" class="wordmark">THE <strong>SHATTERED</strong> REACH</a><div class="turn-state"><span>TURN ${state.turn}${state.phase === "impulse" ? ` · IMPULSE ${state.impulse}` : ""}</span><b>${state.winner ? `${state.winner === "player_one" ? "Player One" : "Player Two"} wins` : state.phase === "allocation" ? "Secret allocation" : activityLabel}</b></div><div class="game-header-actions">${identity}<a class="save-game" href="/matches/${matchId}/download" download>Save game</a></div></header>
+      <header class="game-header"><a href="/" class="wordmark">THE <strong>SHATTERED</strong> REACH</a><div class="turn-state"><span>TURN ${state.turn}${state.phase === "impulse" ? ` · IMPULSE ${state.impulse}` : ""}</span><b>${state.winner ? `${state.winner === "player_one" ? "Player One" : "Player Two"} wins` : state.phase === "allocation" ? "Secret allocation" : activityLabel}</b></div><div class="game-header-actions">${identity}<div class="game-menu"><button class="game-menu-toggle" aria-haspopup="menu" aria-expanded="${gameMenuOpen}">Game <span aria-hidden="true">▾</span></button>${gameMenuOpen ? `<div class="game-menu-list" role="menu"><a class="game-menu-item" role="menuitem" href="/matches/${matchId}/download" download>Save</a><button class="game-menu-item reset-game" role="menuitem">Reset</button><button class="game-menu-item exit-game" role="menuitem">Exit</button></div>` : ""}</div></div></header>
       <main class="match-layout ${fleetStatusCollapsed ? "fleet-status-collapsed" : ""}"><section class="command-panel"><p class="eyebrow">${state.solo ? `Solo command · Active ship ${current?.fleet_index || 1}` : state.scenario === "tutorial" ? `Tutorial · ${["Set the battle plan", "Reveal allocations", "Choose a maneuver", "Fire your first weapon"][state.tutorial_step] || "Continue the engagement"}` : "Fleet command"}</p><h1 class="${state.phase === "allocation" ? "allocation-title" : ""}">${commandTitle}</h1>${commandLog}${commandShipPicker(current)}${current ? controls(current, target) : ""}</section>
       <section class="battlefield"><div class="nebula"></div><div class="zoom-controls" aria-label="Battlefield controls"><button class="movement-lines-toggle" aria-label="${movementLinesVisible ? "Hide" : "Show"} movement paths" aria-pressed="${movementLinesVisible}">${movementLinesVisible ? "TRAILS ON" : "TRAILS OFF"}</button><button class="sound-toggle" aria-label="${soundEnabled ? "Mute" : "Enable"} weapon sounds" aria-pressed="${soundEnabled}">${soundEnabled ? "SOUND ON" : "MUTED"}</button><button class="zoom-out" aria-label="Zoom out">−</button><button class="zoom-reset" aria-label="Reset zoom">${Math.round(zoom * 100)}%</button><button class="zoom-in" aria-label="Zoom in">+</button></div><svg viewBox="0 0 ${boardWidth} ${boardHeight}" aria-label="${boardSize} by ${boardSize} tactical flat-top hex battlefield" style="width:${zoom * 100}%;max-width:none">${grid()}${movementLines()}${movementChoices()}${state.ships.map(hex).join("")}${(state.missiles || []).map(missileCounter).join("")}</svg><div class="battlefield-label">Tactical display · ${boardSize} × ${boardSize} · numbered flat-top hex grid</div></section>
-      <aside class="fleet-status ${fleetStatusCollapsed ? "collapsed" : ""}"><div class="fleet-status-header"><h2>Fleet status</h2><button class="fleet-status-toggle" aria-expanded="${!fleetStatusCollapsed}" aria-label="${fleetStatusCollapsed ? "Expand" : "Collapse"} fleet status"><span class="fleet-status-toggle-icon" aria-hidden="true">${fleetStatusCollapsed ? "‹" : "›"}</span><span class="fleet-status-toggle-label">Fleet status</span></button></div><div class="fleet-status-content"><p class="fleet-status-hint">${state.solo ? "Your ships are selectable; the opposing fleet is controlled by the AI." : "Select a ship for its combat schematic."}</p>${state.ships.map(shipCard).join("")}</div></aside></main>${selectedShip ? shipSchematic(selectedShip, state, player, damageReport) : ""}${impulseModal()}<aside id="weapon-hover-hint" class="weapon-hover-hint fleet-${current?.fleet || "aurelian"}" role="tooltip" aria-hidden="true"></aside>`;
+      <aside class="fleet-status ${fleetStatusCollapsed ? "collapsed" : ""}"><div class="fleet-status-header"><h2>Fleet status</h2><button class="fleet-status-toggle" aria-expanded="${!fleetStatusCollapsed}" aria-label="${fleetStatusCollapsed ? "Expand" : "Collapse"} fleet status"><span class="fleet-status-toggle-icon" aria-hidden="true">${fleetStatusCollapsed ? "‹" : "›"}</span><span class="fleet-status-toggle-label">Fleet status</span></button></div><div class="fleet-status-content"><p class="fleet-status-hint">${state.solo ? "Your ships are selectable; the opposing fleet is controlled by the AI." : "Select a ship for its combat schematic."}</p>${state.ships.map(shipCard).join("")}</div></aside></main>${selectedShip ? shipSchematic(selectedShip, state, player, damageReport) : ""}${impulseModal()}${gameConfirmationModal()}<aside id="weapon-hover-hint" class="weapon-hover-hint fleet-${current?.fleet || "aurelian"}" role="tooltip" aria-hidden="true"></aside>`;
     bind(current, target);
   };
   render();

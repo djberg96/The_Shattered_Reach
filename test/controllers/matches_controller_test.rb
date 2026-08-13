@@ -79,6 +79,26 @@ class MatchesControllerTest < ActionDispatch::IntegrationTest
     assert_equal match.state["ships"].map { |ship| ship["id"] }, document.dig("state", "ships").map { |ship| ship["id"] }
   end
 
+  test "a battle can be reset with its original mode map and exact fleets" do
+    state = ShatteredReach::RulesEngine.start(solo: true, board_size: 20, player_one_ships: %w[aurelian_frigate aurelian_cruiser], ai_match: "number")
+    match = Match.create!(title: "Reset test", state: state)
+    original_fleets = state["ships"].group_by { |ship| ship["player"] }.transform_values { |ships| ships.map { |ship| ship["key"] } }
+    match.state["turn"] = 3
+    match.state["ships"].first["hull"] -= 1
+    match.save!
+
+    post reset_match_url(match), as: :json
+
+    assert_response :success
+    reset_state = response.parsed_body
+    assert reset_state["solo"]
+    assert_equal 20, reset_state["board_size"]
+    assert_equal 1, reset_state["turn"]
+    assert_equal "allocation", reset_state["phase"]
+    assert_equal original_fleets, reset_state["ships"].group_by { |ship| ship["player"] }.transform_values { |ships| ships.map { |ship| ship["key"] } }
+    assert reset_state["ships"].all? { |ship| ship["hull"] == ship["max_hull"] }
+  end
+
   test "a portable save can be loaded into a new match" do
     original = Match.create!(title: "Imported patrol", state: ShatteredReach::RulesEngine.start(solo: true, board_size: 20))
     upload = Tempfile.new(["shattered-reach", ".json"])

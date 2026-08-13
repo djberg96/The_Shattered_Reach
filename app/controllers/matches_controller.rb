@@ -35,6 +35,15 @@ class MatchesController < ApplicationController
     send_data ShatteredReach::SaveGame.dump(match), filename: filename, type: "application/json", disposition: "attachment"
   end
 
+  def reset
+    match = Match.find(params[:id])
+    match.update!(state: ShatteredReach::RulesEngine.restart(match.game_state))
+    respond_to do |format|
+      format.html { redirect_to match, notice: "Battle reset." }
+      format.json { render json: match.game_state }
+    end
+  end
+
   def import
     upload = params[:save_file]
     raise ShatteredReach::SaveGame::InvalidSave, "Choose a save file to load" unless upload.respond_to?(:read)

@@ -12,6 +12,7 @@ Rails.application.routes.draw do
   root "matches#index"
   resources :matches, only: %i[index create show] do
     post :action, on: :member
+    post :reset, on: :member
     get :download, on: :member
     post :import, on: :collection
   end
