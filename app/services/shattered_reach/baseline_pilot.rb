@@ -4,14 +4,20 @@ module ShatteredReach
   # A deliberately transparent first-pass opponent: it spends energy on closing
   # distance, then charges weapons it can plausibly bring to bear.
   class BaselinePilot
-    def self.allocation(state, player)
-      ship = state.fetch("ships").find { |entry| entry["player"] == player && !entry["destroyed"] }
-      enemy = state.fetch("ships").find { |entry| entry["player"] != player && !entry["destroyed"] }
-      return {} unless ship && enemy
+    def self.allocation(state, player, ship_id: nil)
+      ship = state.fetch("ships").find do |entry|
+        entry["player"] == player && !entry["destroyed"] && (ship_id.nil? || entry["id"] == ship_id)
+      end
+      return {} unless ship
+
+      enemies = state.fetch("ships").select { |entry| entry["player"] != player && !entry["destroyed"] }
+      enemy = enemies.min_by { |entry| RulesEngine.distance(ship["position"], entry["position"]) }
+      return {} unless enemy
 
       range = RulesEngine.send(:distance, ship["position"], enemy["position"])
-      speed = range > 6 ? [4, ship["energy"]].min : 2
-      budget = [ship["energy"] - ship.dig("damage", "engines").to_i - speed, 0].max
+      available_energy = [ship["energy"] - ship.dig("damage", "engines").to_i, 0].max
+      speed = [range > 6 ? 4 : 2, available_energy].min
+      budget = available_energy - speed
       repair = %w[front aft].select do |bank|
         ship.dig("shields", bank).to_i < ship.fetch("max_#{bank}_shields")
       end.min_by { |bank| ship.dig("shields", bank).to_i }
@@ -31,54 +37,55 @@ module ShatteredReach
     end
 
     def self.combat_action(state, player)
-      ship = state.fetch("ships").find { |entry| entry["player"] == player && !entry["destroyed"] }
-      ship_target = state.fetch("ships").find { |entry| entry["player"] != player && !entry["destroyed"] }
-      return unless ship && ship_target
-
-      weapons = ship["weapons"].select do |candidate|
-        next if candidate["destroyed"] || candidate["fired"] || candidate["type"] == "missile"
-        next unless ship.dig("allocation", "weapons").include?(candidate["id"])
-
-        true
-      end
-
-      targets = state.fetch("missiles").select { |missile| missile["owner"] != player }.sort_by do |missile|
-        RulesEngine.distance(ship["position"], missile["position"])
-      end
-      targets << ship_target
-
-      targets.each do |target|
-        range = RulesEngine.distance(ship["position"], target["position"])
-        weapon = weapons.find do |candidate|
-          GameDefinition::WEAPONS.fetch(candidate["type"])[:ranges].any? { |limit| range <= limit } &&
-            RulesEngine.send(:target_in_arc?, ship, target, candidate["arc"])
+      ships = state.fetch("ships").select { |entry| entry["player"] == player && !entry["destroyed"] }
+      ship_targets = state.fetch("ships").select { |entry| entry["player"] != player && !entry["destroyed"] }
+      ships.each do |ship|
+        weapons = ship["weapons"].select do |candidate|
+          !candidate["destroyed"] && !candidate["fired"] && candidate["type"] != "missile" && ship.dig("allocation", "weapons").include?(candidate["id"])
         end
-        next unless weapon
+        targets = state.fetch("missiles").select { |missile| missile["owner"] != player } + ship_targets
+        targets.sort_by! { |target| RulesEngine.distance(ship["position"], target["position"]) }
+        targets.each do |target|
+          range = RulesEngine.distance(ship["position"], target["position"])
+          weapon = weapons.find do |candidate|
+            GameDefinition::WEAPONS.fetch(candidate["type"])[:ranges].any? { |limit| range <= limit } &&
+              RulesEngine.send(:target_in_arc?, ship, target, candidate["arc"])
+          end
+          next unless weapon
 
-        return { action: "fire", payload: { "ship_id" => ship["id"], "target_id" => target["id"], "weapon_id" => weapon["id"] } }
+          return { action: "fire", payload: { "ship_id" => ship["id"], "target_id" => target["id"], "weapon_id" => weapon["id"] } }
+        end
       end
 
       nil
     end
 
     def self.missile_action(state, player)
-      ship = state.fetch("ships").find { |entry| entry["player"] == player && !entry["destroyed"] }
-      target = state.fetch("ships").find { |entry| entry["player"] != player && !entry["destroyed"] }
-      return unless ship && target
+      ships = state.fetch("ships").select { |entry| entry["player"] == player && !entry["destroyed"] }
+      targets = state.fetch("ships").select { |entry| entry["player"] != player && !entry["destroyed"] }
+      ships.each do |ship|
+        weapon = ship["weapons"].find do |candidate|
+          candidate["type"] == "missile" && !candidate["destroyed"] && !candidate["fired"] && candidate["ammo"].to_i.positive?
+        end
+        next unless weapon
 
-      weapon = ship["weapons"].find do |candidate|
-        candidate["type"] == "missile" && !candidate["destroyed"] && !candidate["fired"] && candidate["ammo"].to_i.positive?
+        target = targets.min_by { |candidate| RulesEngine.distance(ship["position"], candidate["position"]) }
+        next unless target
+
+        return { action: "launch_missile", payload: { "ship_id" => ship["id"], "target_id" => target["id"], "weapon_id" => weapon["id"] } }
       end
-      return unless weapon
 
-      { action: "launch_missile", payload: { "ship_id" => ship["id"], "target_id" => target["id"], "weapon_id" => weapon["id"] } }
+      nil
     end
 
     def self.movement_action(state, player)
       ship_id = state.fetch("pending_movement").first
       ship = state.fetch("ships").find { |entry| entry["id"] == ship_id && entry["player"] == player && !entry["destroyed"] }
-      target = state.fetch("ships").find { |entry| entry["player"] != player && !entry["destroyed"] }
-      return unless ship && target
+      return unless ship
+
+      targets = state.fetch("ships").select { |entry| entry["player"] != player && !entry["destroyed"] }
+      target = targets.min_by { |entry| RulesEngine.distance(ship["position"], entry["position"]) }
+      return unless target
 
       options = state.fetch("movement_options")
       translations = options & %w[forward sideslip_left sideslip_right]

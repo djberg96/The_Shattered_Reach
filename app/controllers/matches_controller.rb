@@ -11,8 +11,18 @@ class MatchesController < ApplicationController
     mode = params[:mode].presence
     scenario = mode == "tutorial" || params[:scenario] == "tutorial" ? :tutorial : :skirmish
     solo = mode == "solo" || params[:solo] == "true"
-    match = Match.create!(title: scenario == :tutorial ? "First Light Tutorial" : "Shattered Reach Skirmish", state: ShatteredReach::RulesEngine.start(scenario: scenario, solo: solo, board_size: params[:board_size]))
+    state = ShatteredReach::RulesEngine.start(
+      scenario: scenario,
+      solo: solo,
+      board_size: params[:board_size],
+      player_one_ships: params[:player_one_ships],
+      player_two_ships: params[:player_two_ships],
+      ai_match: params[:ai_match]
+    )
+    match = Match.create!(title: scenario == :tutorial ? "First Light Tutorial" : "Shattered Reach Skirmish", state: state)
     redirect_to match
+  rescue ShatteredReach::RulesEngine::IllegalAction => error
+    redirect_to matches_path, alert: error.message
   end
 
   def show

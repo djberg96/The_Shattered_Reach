@@ -86,6 +86,7 @@ module ShatteredReach
       state["ships"].each do |ship|
         spec = GameDefinition::SHIPS.fetch(ship["key"])
         ship["name"] = spec[:name]
+        ship["fleet_index"] = ship["fleet_index"].to_i.clamp(1, 3)
         ship["fleet"] = spec[:fleet]
         ship["size"] = spec[:size]
         ship["energy"] = spec[:energy]
@@ -114,6 +115,7 @@ module ShatteredReach
           "weapons" => ship.dig("damage", "weapons").to_i.clamp(0, spec[:weapons].length)
         }
         ship["locked"] = ship["locked"] == true
+        ship["allocation_set"] = ship["allocation_set"] == true
         ship["destroyed"] = ship["destroyed"] == true || ship["hull"].zero?
         ship["special_available"] = ship["special_available"] == true && spec[:size] != "large"
         ship["movement"] = {

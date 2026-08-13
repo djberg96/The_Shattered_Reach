@@ -7,6 +7,30 @@ class MatchesControllerTest < ActionDispatch::IntegrationTest
     get root_url
     assert_response :success
     assert_select "h1", /SHATTERED/
+    ShatteredReach::GameDefinition::SHIPS.each_value do |ship|
+      assert_select "option", text: /#{Regexp.escape(ship[:name].split.last)}/
+    end
+  end
+
+  test "a hot-seat skirmish accepts duplicate three-ship fleets" do
+    post matches_url, params: {
+      mode: "hotseat",
+      player_one_ships: %w[aurelian_frigate aurelian_frigate kestrel_battleship],
+      player_two_ships: %w[veyr_frigate veyr_cruiser veyr_battleship]
+    }
+
+    assert_response :redirect
+    assert_equal 6, Match.last.state["ships"].length
+    assert_equal 2, Match.last.state["ships"].count { |ship| ship["key"] == "aurelian_frigate" }
+  end
+
+  test "a solo skirmish balances the selected fleet by total size" do
+    post matches_url, params: { mode: "solo", player_one_ships: %w[aurelian_frigate aurelian_battleship], ai_match: "size" }
+
+    assert_response :redirect
+    values = ShatteredReach::RulesEngine::SIZE_VALUES
+    fleets = Match.last.state["ships"].group_by { |ship| ship["player"] }
+    assert_equal fleets["player_one"].sum { |ship| values.fetch(ship["size"]) }, fleets["player_two"].sum { |ship| values.fetch(ship["size"]) }
   end
 
   test "a tutorial can be created" do

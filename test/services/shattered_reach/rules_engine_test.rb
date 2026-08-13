@@ -3,6 +3,49 @@
 require "test_helper"
 
 class ShatteredReach::RulesEngineTest < ActiveSupport::TestCase
+  test "a skirmish can deploy up to three ships per player with duplicates" do
+    state = ShatteredReach::RulesEngine.start(
+      player_one_ships: %w[aurelian_frigate aurelian_frigate kestrel_battleship],
+      player_two_ships: %w[veyr_cruiser veyr_battleship]
+    )
+
+    assert_equal %w[aurelian_frigate aurelian_frigate kestrel_battleship], state["ships"].select { |ship| ship["player"] == "player_one" }.map { |ship| ship["key"] }
+    assert_equal %w[veyr_cruiser veyr_battleship], state["ships"].select { |ship| ship["player"] == "player_two" }.map { |ship| ship["key"] }
+    assert_equal state["ships"].length, state["ships"].map { |ship| ship["id"] }.uniq.length
+    assert_equal state["ships"].length, state["ships"].map { |ship| ship["position"].first(2) }.uniq.length
+  end
+
+  test "a skirmish rejects more than three ships or unknown classes" do
+    error = assert_raises(ShatteredReach::RulesEngine::IllegalAction) do
+      ShatteredReach::RulesEngine.start(player_one_ships: Array.new(4, "aurelian_frigate"))
+    end
+    assert_match(/no more than three/, error.message)
+
+    error = assert_raises(ShatteredReach::RulesEngine::IllegalAction) do
+      ShatteredReach::RulesEngine.start(player_one_ships: ["space_waffle"])
+    end
+    assert_match(/Unknown ship/, error.message)
+  end
+
+  test "solo size balancing matches fleet value using no more than three ships" do
+    state = ShatteredReach::RulesEngine.start(solo: true, player_one_ships: %w[aurelian_frigate aurelian_battleship], ai_match: "size")
+    values = ShatteredReach::RulesEngine::SIZE_VALUES
+    human_value = state["ships"].select { |ship| ship["player"] == "player_one" }.sum { |ship| values.fetch(ship["size"]) }
+    ai_ships = state["ships"].select { |ship| ship["player"] == "player_two" }
+
+    assert_equal human_value, ai_ships.sum { |ship| values.fetch(ship["size"]) }
+    assert_operator ai_ships.length, :<=, 3
+    assert ai_ships.all? { |ship| ship["fleet"] != "aurelian" }
+  end
+
+  test "solo number balancing matches ship count" do
+    state = ShatteredReach::RulesEngine.start(solo: true, player_one_ships: %w[aurelian_frigate kestrel_battleship kestrel_frigate], ai_match: "number")
+
+    assert_equal 3, state["ships"].count { |ship| ship["player"] == "player_one" }
+    assert_equal 3, state["ships"].count { |ship| ship["player"] == "player_two" }
+    assert state["ships"].select { |ship| ship["player"] == "player_two" }.all? { |ship| ship["size"] == "medium" }
+  end
+
   test "supported board sizes deploy ships ten to fifteen hexes apart facing each other" do
     [12, 15, 20].each do |board_size|
       state = ShatteredReach::RulesEngine.start(board_size: board_size)
@@ -183,6 +226,21 @@ class ShatteredReach::RulesEngineTest < ActiveSupport::TestCase
     assert_includes %w[player_one player_two], state["initiative"]
     assert_equal 3, state["impulse_order"].length
     state["impulse_order"].each { |phase| assert_equal [0, 1, 2, 3], phase.sort }
+  end
+
+  test "a player must allocate every surviving ship before locking a fleet" do
+    state = ShatteredReach::RulesEngine.start(player_one_ships: %w[aurelian_frigate aurelian_cruiser])
+    ships = state["ships"].select { |ship| ship["player"] == "player_one" }
+    state = ShatteredReach::RulesEngine.apply(state, player: "player_one", action: "allocate", payload: { "ship_id" => ships.first["id"], "speed" => 0 })
+
+    error = assert_raises(ShatteredReach::RulesEngine::IllegalAction) do
+      ShatteredReach::RulesEngine.apply(state, player: "player_one", action: "lock_allocation")
+    end
+    assert_match(/every ship/, error.message)
+
+    state = ShatteredReach::RulesEngine.apply(state, player: "player_one", action: "allocate", payload: { "ship_id" => ships.last["id"], "speed" => 0 })
+    state = ShatteredReach::RulesEngine.apply(state, player: "player_one", action: "lock_allocation")
+    assert state["ships"].select { |ship| ship["player"] == "player_one" }.all? { |ship| ship["locked"] }
   end
 
   test "each phase draws all four original impulse cards without replacement" do

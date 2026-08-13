@@ -51,8 +51,10 @@ class Match < ApplicationRecord
   end
 
   def run_solo_opponent!
-    allocation = ShatteredReach::BaselinePilot.allocation(state, "player_two")
-    self.state = ShatteredReach::RulesEngine.apply(state, player: "player_two", action: "allocate", payload: allocation)
+    state["ships"].select { |ship| ship["player"] == "player_two" && !ship["destroyed"] }.each do |ship|
+      allocation = ShatteredReach::BaselinePilot.allocation(state, "player_two", ship_id: ship["id"])
+      self.state = ShatteredReach::RulesEngine.apply(state, player: "player_two", action: "allocate", payload: allocation)
+    end
     self.state = ShatteredReach::RulesEngine.apply(state, player: "player_two", action: "lock_allocation", payload: {})
   end
 
@@ -76,9 +78,9 @@ class Match < ApplicationRecord
   end
 
   def run_solo_launch!
-    decision = ShatteredReach::BaselinePilot.missile_action(state, "player_two")
-    return unless decision
-
-    self.state = ShatteredReach::RulesEngine.apply(state, player: "player_two", action: decision.fetch(:action), payload: decision.fetch(:payload))
+    while (decision = ShatteredReach::BaselinePilot.missile_action(state, "player_two"))
+      self.state = ShatteredReach::RulesEngine.apply(state, player: "player_two", action: decision.fetch(:action), payload: decision.fetch(:payload))
+      break if state["winner"]
+    end
   end
 end

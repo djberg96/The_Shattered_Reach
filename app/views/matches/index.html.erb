@@ -8,8 +8,21 @@
       <h1>THE <em>SHATTERED</em> REACH</h1>
       <p class="lede">Commit power in secret. Read the impulse. Break the enemy fleet before it breaks you.</p>
       <%= form_with url: matches_path, class: "launch-form", data: { turbo: false } do |form| %>
-        <%= form.label :board_size, "Battlefield size" %>
-        <%= form.select :board_size, [["12 × 12", 12], ["15 × 15", 15], ["20 × 20", 20]], selected: 15 %>
+        <% ship_options = ShatteredReach::GameDefinition::SHIPS.map { |key, ship| ["#{ShatteredReach::GameDefinition::FLEETS.fetch(ship[:fleet])[:name]} · #{ship[:name].delete_prefix("#{ShatteredReach::GameDefinition::FLEETS.fetch(ship[:fleet])[:name].split.first} ")} · #{ship[:size].capitalize}", key] } %>
+        <div class="skirmish-options">
+          <label>Battlefield size<%= form.select :board_size, [["12 × 12", 12], ["15 × 15", 15], ["20 × 20", 20]], selected: 15 %></label>
+          <fieldset class="fleet-builder player-one"><legend>Your fleet · up to three ships</legend>
+            <%= select_tag "player_one_ships[]", options_for_select(ship_options, "aurelian_cruiser"), aria: { label: "Your first ship" } %>
+            <%= select_tag "player_one_ships[]", options_for_select([["No ship", ""]] + ship_options), aria: { label: "Your second ship" } %>
+            <%= select_tag "player_one_ships[]", options_for_select([["No ship", ""]] + ship_options), aria: { label: "Your third ship" } %>
+          </fieldset>
+          <fieldset class="fleet-builder player-two"><legend>Hot-seat opponent fleet</legend>
+            <%= select_tag "player_two_ships[]", options_for_select(ship_options, "kestrel_cruiser"), aria: { label: "Opponent first ship" } %>
+            <%= select_tag "player_two_ships[]", options_for_select([["No ship", ""]] + ship_options), aria: { label: "Opponent second ship" } %>
+            <%= select_tag "player_two_ships[]", options_for_select([["No ship", ""]] + ship_options), aria: { label: "Opponent third ship" } %>
+          </fieldset>
+          <label>AI balancing<%= form.select :ai_match, [["Match total size value", "size"], ["Match ship count", "number"]], selected: "size" %></label>
+        </div>
         <div class="launch-actions">
           <%= form.button "Begin a skirmish", name: :mode, value: :hotseat, class: "primary" %>
           <%= form.button "Fight the command AI", name: :mode, value: :solo, class: "secondary" %>

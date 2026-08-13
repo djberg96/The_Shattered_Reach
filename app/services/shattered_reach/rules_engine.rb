@@ -9,13 +9,31 @@ module ShatteredReach
 
     class IllegalAction < StandardError; end
 
-    def self.start(scenario: :skirmish, solo: false, board_size: 15)
+    DEFAULT_FLEETS = {
+      "player_one" => ["aurelian_cruiser"],
+      "player_two" => ["kestrel_cruiser"]
+    }.freeze
+    SIZE_VALUES = { "small" => 2, "medium" => 3, "large" => 4 }.freeze
+
+    def self.start(scenario: :skirmish, solo: false, board_size: 15, player_one_ships: nil, player_two_ships: nil, ai_match: "size")
       board_size = board_size.to_i
       board_size = 15 unless BOARD_SIZES.include?(board_size)
-      positions = starting_positions(board_size)
-      blueprint = scenario == :tutorial ? [%w[aurelian_frigate veyr_frigate]] : [%w[aurelian_cruiser kestrel_cruiser]]
-      ships = blueprint.first.each_with_index.map do |ship_key, index|
-        build_ship(ship_key, index.zero? ? "player_one" : "player_two", positions[index])
+      fleets = if scenario == :tutorial
+                 { "player_one" => ["aurelian_frigate"], "player_two" => ["veyr_frigate"] }
+               else
+                 human = normalize_fleet_selection(player_one_ships, DEFAULT_FLEETS["player_one"])
+                 opponent = if solo
+                              ai_fleet_for(human, ai_match)
+                            else
+                              normalize_fleet_selection(player_two_ships, DEFAULT_FLEETS["player_two"])
+                            end
+                 { "player_one" => human, "player_two" => opponent }
+               end
+      positions = starting_formations(board_size, fleets.transform_values(&:length))
+      ships = fleets.flat_map do |player, ship_keys|
+        ship_keys.each_with_index.map do |ship_key, index|
+          build_ship(ship_key, player, positions.fetch(player).fetch(index), index + 1)
+        end
       end
       {
         "version" => GameDefinition::VERSION, "scenario" => scenario.to_s, "solo" => solo, "board_size" => board_size, "turn" => 1,
@@ -29,15 +47,57 @@ module ShatteredReach
       }
     end
 
+    def self.normalize_fleet_selection(selection, fallback)
+      selected = Array(selection).map(&:to_s).reject(&:blank?)
+      selected = fallback if selected.empty?
+      raise IllegalAction, "A skirmish fleet may contain no more than three ships" if selected.length > 3
+      raise IllegalAction, "Unknown ship selection" unless selected.all? { |key| GameDefinition::SHIPS.key?(key) }
+
+      selected
+    end
+    private_class_method :normalize_fleet_selection
+
+    def self.ai_fleet_for(human_fleet, match_by)
+      enemy_fleet = opposing_fleet_for(human_fleet)
+      available = GameDefinition::SHIPS.select { |_key, spec| spec[:fleet] == enemy_fleet }
+      if match_by.to_s == "number"
+        cruiser = available.find { |_key, spec| spec[:size] == "medium" }.first
+        return Array.new(human_fleet.length, cruiser)
+      end
+
+      target_value = human_fleet.sum { |key| SIZE_VALUES.fetch(GameDefinition::SHIPS.fetch(key)[:size]) }
+      size_patterns = (1..3).flat_map { |count| %w[small medium large].repeated_permutation(count).to_a }
+      pattern = size_patterns.select { |sizes| sizes.sum { |size| SIZE_VALUES.fetch(size) } == target_value }
+                             .min_by { |sizes| [sizes.length, sizes.join] }
+      pattern.map { |size| available.find { |_key, spec| spec[:size] == size }.first }
+    end
+    private_class_method :ai_fleet_for
+
+    def self.opposing_fleet_for(human_fleet)
+      counts = human_fleet.map { |key| GameDefinition::SHIPS.fetch(key)[:fleet] }.tally
+      dominant = counts.max_by { |fleet, count| [count, fleet] }&.first || "aurelian"
+      { "aurelian" => "kestrel", "kestrel" => "veyr", "veyr" => "aurelian" }.fetch(dominant)
+    end
+    private_class_method :opposing_fleet_for
+
     def self.starting_positions(board_size)
-      separation = (board_size - 3).clamp(10, 15)
+      formations = starting_formations(board_size, { "player_one" => 1, "player_two" => 1 })
+      [formations["player_one"].first, formations["player_two"].first]
+    end
+    private_class_method :starting_positions
+
+    def self.starting_formations(board_size, counts)
+      separation = (board_size - 3).clamp(10, 13)
       left_column = ((board_size - 1 - separation) / 2.0).floor
       right_column = left_column + separation
       row = board_size / 2
-
-      [[left_column, row - (left_column / 2), 0], [right_column, row - (right_column / 2), 3]]
+      row_offsets = { 1 => [0], 2 => [-1, 1], 3 => [-1, 0, 1] }
+      {
+        "player_one" => row_offsets.fetch(counts.fetch("player_one")).map { |offset| [left_column, row + offset - (left_column / 2), 0] },
+        "player_two" => row_offsets.fetch(counts.fetch("player_two")).map { |offset| [right_column, row + offset - (right_column / 2), 3] }
+      }
     end
-    private_class_method :starting_positions
+    private_class_method :starting_formations
 
     def self.apply(state, player:, action:, payload: {})
       state = Marshal.load(Marshal.dump(state))
@@ -85,6 +145,7 @@ module ShatteredReach
         spec = GameDefinition::SHIPS[ship["key"]]
         next unless spec
 
+        ship["fleet_index"] ||= state["ships"].select { |candidate| candidate["player"] == ship["player"] }.index(ship).to_i + 1
         ship["max_front_shields"] ||= spec[:front_shields]
         ship["max_aft_shields"] ||= spec[:aft_shields]
         allocation = ship["allocation"] ||= { "speed" => 0, "shields" => {}, "shield_repair" => nil, "weapons" => [] }
@@ -94,6 +155,7 @@ module ShatteredReach
         allocation["shields"]["front"] ||= 0
         allocation["shields"]["aft"] ||= 0
         allocation["shield_repair"] = nil unless %w[front aft].include?(allocation["shield_repair"])
+        ship["allocation_set"] = ship["allocation_set"] == true
         ship["movement"] ||= { "hexes_since_turn" => 0, "last_action" => nil }
         ship["movement_path"] = [ship["position"].first(2)] unless ship["movement_path"].is_a?(Array) && ship["movement_path"].any?
       end
@@ -120,14 +182,14 @@ module ShatteredReach
     end
     private_class_method :migrate_loadouts!
 
-    def self.build_ship(key, player, position)
+    def self.build_ship(key, player, position, fleet_index = 1)
       spec = GameDefinition::SHIPS.fetch(key)
       {
-        "id" => "#{player}-#{key}", "key" => key, "player" => player, "name" => spec[:name], "fleet" => spec[:fleet],
+        "id" => "#{player}-#{key}-#{fleet_index}", "key" => key, "player" => player, "name" => spec[:name], "fleet_index" => fleet_index, "fleet" => spec[:fleet],
         "size" => spec[:size], "position" => position, "energy" => spec[:energy], "hull" => spec[:hull], "max_hull" => spec[:hull],
         "shields" => { "front" => spec[:front_shields], "aft" => spec[:aft_shields] }, "max_front_shields" => spec[:front_shields], "max_aft_shields" => spec[:aft_shields],
         "allocation" => { "speed" => 0, "shields" => { "front" => 0, "aft" => 0 }, "shield_repair" => nil, "weapons" => [] },
-        "locked" => false, "special_available" => spec[:size] != "large", "weapons" => spec[:weapons].map.with_index { |w, i| w.stringify_keys.merge("id" => "w#{i}", "destroyed" => false, "fired" => false) },
+        "allocation_set" => false, "locked" => false, "special_available" => spec[:size] != "large", "weapons" => spec[:weapons].map.with_index { |w, i| w.stringify_keys.merge("id" => "w#{i}", "destroyed" => false, "fired" => false) },
         "damage" => { "engines" => 0, "weapons" => 0 }, "movement" => { "hexes_since_turn" => 0, "last_action" => nil },
         "movement_path" => [position.first(2)], "destroyed" => false
       }
@@ -154,12 +216,16 @@ module ShatteredReach
       cost = speed + front_shields + aft_shields + (shield_repair ? 2 : 0) + selected.sum { |w| GameDefinition::WEAPONS.fetch(w[:type] || w["type"])[:energy] }
       raise IllegalAction, "Allocation needs #{cost} energy; ship has #{available_energy(ship)}" if cost > available_energy(ship)
       ship["allocation"] = { "speed" => speed, "shields" => { "front" => front_shields, "aft" => aft_shields }, "shield_repair" => shield_repair, "weapons" => selected.map { |w| w["id"] } }
+      ship["allocation_set"] = true
       log!(state, "#{ship["name"]} has set its allocation.")
     end
     private_class_method :allocate!
 
     def self.lock_allocation!(state, player)
       require_phase!(state, "allocation")
+      unallocated = ships_for(state, player).reject { |ship| ship["allocation_set"] }
+      raise IllegalAction, "Set an allocation for every ship before committing the fleet" if unallocated.any?
+
       ships_for(state, player).each { |ship| ship["locked"] = true }
       log!(state, "#{player == "player_one" ? "Player One" : "Player Two"} locks allocation.")
       return unless state["ships"].all? { |ship| ship["locked"] || ship["destroyed"] }
@@ -618,6 +684,7 @@ module ShatteredReach
         next if ship["destroyed"]
 
         repair_shield!(state, ship)
+        ship["allocation_set"] = false
         ship["locked"] = false
         ship["allocation"] = { "speed" => 0, "shields" => { "front" => 0, "aft" => 0 }, "shield_repair" => nil, "weapons" => [] }
         ship["weapons"].each { |weapon| weapon["fired"] = false }

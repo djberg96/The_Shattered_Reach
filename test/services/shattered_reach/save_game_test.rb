@@ -16,6 +16,18 @@ class ShatteredReach::SaveGameTest < ActiveSupport::TestCase
     assert_equal 4, loaded[:state].dig("ships", 0, "allocation", "speed")
   end
 
+  test "duplicate ships in a fleet retain distinct identities through save and load" do
+    state = ShatteredReach::RulesEngine.start(player_one_ships: %w[aurelian_frigate aurelian_frigate kestrel_battleship])
+    match = Match.create!(title: "Duplicate patrol", state: state)
+
+    loaded = ShatteredReach::SaveGame.load(ShatteredReach::SaveGame.dump(match))[:state]
+    ships = loaded["ships"].select { |ship| ship["player"] == "player_one" }
+
+    assert_equal %w[aurelian_frigate aurelian_frigate kestrel_battleship], ships.map { |ship| ship["key"] }
+    assert_equal [1, 2, 3], ships.map { |ship| ship["fleet_index"] }
+    assert_equal 3, ships.map { |ship| ship["id"] }.uniq.length
+  end
+
   test "loading discards transient effects and undo history" do
     match = Match.create!(title: "Clean Restore", state: ShatteredReach::RulesEngine.start)
     match.state["combat_events"] = [{ "id" => 9, "kind" => "weapon_fire" }]
