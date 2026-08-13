@@ -304,7 +304,7 @@ export function mountMatch(root) {
   const commandShipPicker = (current) => {
     const ships = state.ships.filter((ship) => ship.player === player && !ship.destroyed);
     if (ships.length < 2) return "";
-    return `<nav class="command-ship-picker" aria-label="Choose ship to command">${ships.map((ship) => `<button class="${ship.id === current?.id ? "active" : ""}" data-command-ship-id="${ship.id}"><span>Ship ${ship.fleet_index || 1}</span><b>${ship.name}</b><small>${state.phase === "allocation" ? ship.locked ? "Locked" : ship.allocation_set ? "Allocation set" : "Not allocated" : `Speed ${ship.allocation.speed}`}</small></button>`).join("")}</nav>`;
+    return `<nav class="command-ship-picker" aria-label="Choose ship to command">${ships.map((ship) => `<button class="${ship.id === current?.id ? "active" : ""}" data-command-ship-id="${ship.id}"><span>Ship ${ship.fleet_index || 1}</span><b>${ship.name}</b><small>${state.phase === "allocation" ? ship.locked ? `Speed ${ship.allocation.speed} · locked` : ship.allocation_set ? `Speed ${ship.allocation.speed} · saved` : "Not allocated" : `Speed ${ship.allocation.speed}`}</small></button>`).join("")}</nav>`;
   };
   const controls = (ship, target) => {
     const undoMovement = state.movement_undo?.player === player ? `<button class="secondary undo-movement">Undo last movement</button>` : "";
@@ -335,8 +335,24 @@ export function mountMatch(root) {
     return `<div class="control-stack">${activityStrip()}<p class="step-help">${selectedWeapon ? `Now hover over an enemy ship or missile to inspect the shot, then click a legal target to fire ${selectedWeapon.mount || weaponName(selectedWeapon)}.` : "Select a powered weapon, then choose an enemy ship or missile on the battlefield."}</p>${poweredWeapons.map((weapon) => `<button class="secondary select-weapon ${weapon.id === selectedWeaponId ? "selected" : ""}" data-weapon="${weapon.id}">${weapon.id === selectedWeaponId ? "Selected" : "Select"} ${weapon.mount ? `${weapon.mount} ` : ""}${weaponName(weapon)} · Arc ${weapon.arc.join("/")}<small>${weapon.id === selectedWeaponId ? "Choose an enemy ship or missile" : `${weaponEnergy(weapon)} energy · unfired`}</small></button>`).join("")}${poweredWeapons.length ? "" : `<p class="no-legal-action">No unfired direct weapon is powered this turn.</p>`}${selectedWeapon ? `<button class="secondary cancel-weapon">Cancel target selection</button>` : ""}<button class="primary finish-impulse">${state.impulse >= 12 ? "End turn" : "End impulse"}</button></div>`;
   };
   const bind = (ship, target) => {
-    root.querySelector(".switch-player")?.addEventListener("click", () => { if (!state.solo) { player = player === "player_one" ? "player_two" : "player_one"; activeShipId = state.ships.find((entry) => entry.player === player && !entry.destroyed)?.id || null; selectedWeaponId = null; render(); } });
-    root.querySelectorAll("[data-command-ship-id]").forEach((button) => button.addEventListener("click", () => { activeShipId = button.dataset.commandShipId; selectedWeaponId = null; render(); }));
+    const allocationPayload = () => ({ ship_id: ship.id, speed: root.querySelector("#speed").value, front_shields: root.querySelector("#front-shields").value, aft_shields: root.querySelector("#aft-shields").value, shield_repair: root.querySelector("#shield-repair").value, weapons: [...root.querySelectorAll(".weapon-allocation input:checked")].map((input) => input.value) });
+    const saveCurrentAllocation = async () => {
+      if (state.phase !== "allocation" || !ship || ship.locked) return true;
+      return request("allocate", allocationPayload());
+    };
+    root.querySelector(".switch-player")?.addEventListener("click", async () => {
+      if (state.solo || !await saveCurrentAllocation()) return;
+      player = player === "player_one" ? "player_two" : "player_one";
+      activeShipId = state.ships.find((entry) => entry.player === player && !entry.destroyed)?.id || null;
+      selectedWeaponId = null;
+      render();
+    });
+    root.querySelectorAll("[data-command-ship-id]").forEach((button) => button.addEventListener("click", async () => {
+      if (button.dataset.commandShipId === ship?.id || !await saveCurrentAllocation()) return;
+      activeShipId = button.dataset.commandShipId;
+      selectedWeaponId = null;
+      render();
+    }));
     root.querySelector(".fleet-status-toggle")?.addEventListener("click", () => {
       fleetStatusCollapsed = !fleetStatusCollapsed;
       window.localStorage.setItem("shattered-reach-fleet-status", fleetStatusCollapsed ? "collapsed" : "expanded");
@@ -372,7 +388,6 @@ export function mountMatch(root) {
     root.querySelectorAll(".weapon-allocation input").forEach((input) => input.addEventListener("change", updateEnergyBudget));
     root.querySelector("#shield-repair")?.addEventListener("change", updateEnergyBudget);
     updateEnergyBudget();
-    const allocationPayload = () => ({ ship_id: ship.id, speed: root.querySelector("#speed").value, front_shields: root.querySelector("#front-shields").value, aft_shields: root.querySelector("#aft-shields").value, shield_repair: root.querySelector("#shield-repair").value, weapons: [...root.querySelectorAll(".weapon-allocation input:checked")].map((input) => input.value) });
     root.querySelector(".save-allocation")?.addEventListener("click", () => request("allocate", allocationPayload()));
     root.querySelector(".commit-allocation")?.addEventListener("click", async () => {
       if (!await request("allocate", allocationPayload())) return;

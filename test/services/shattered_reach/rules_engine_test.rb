@@ -284,6 +284,36 @@ class ShatteredReach::RulesEngineTest < ActiveSupport::TestCase
     assert_equal "launch", state["activity_step"]
   end
 
+  test "every same-speed ship receives its own movement opportunity" do
+    state = ShatteredReach::RulesEngine.start(player_one_ships: %w[aurelian_frigate aurelian_frigate])
+    human_ships = state["ships"].select { |ship| ship["player"] == "player_one" }
+    opponent = state["ships"].find { |ship| ship["player"] == "player_two" }
+
+    human_ships.each do |ship|
+      state = ShatteredReach::RulesEngine.apply(state, player: "player_one", action: "allocate", payload: { "ship_id" => ship["id"], "speed" => 6 })
+    end
+    state = ShatteredReach::RulesEngine.apply(state, player: "player_one", action: "lock_allocation")
+    state = ShatteredReach::RulesEngine.apply(state, player: "player_two", action: "allocate", payload: { "ship_id" => opponent["id"], "speed" => 0 })
+    state = ShatteredReach::RulesEngine.apply(state, player: "player_two", action: "lock_allocation")
+
+    card_index = ShatteredReach::GameDefinition::IMPULSE_DECKS.first.index { |card| card.include?(6) }
+    state["impulse_order"][0][0] = card_index
+    state = ShatteredReach::RulesEngine.apply(state, player: "player_one", action: "advance_impulse")
+
+    assert_equal human_ships.map { |ship| ship["id"] }, state["pending_movement"]
+    first = state["ships"].find { |ship| ship["id"] == state["pending_movement"].first }
+    state = ShatteredReach::RulesEngine.apply(state, player: "player_one", action: "move_ship", payload: { "ship_id" => first["id"], "maneuver" => "forward" })
+
+    assert_equal "movement", state["activity_step"]
+    assert_equal [human_ships.last["id"]], state["pending_movement"]
+
+    second = state["ships"].find { |ship| ship["id"] == state["pending_movement"].first }
+    state = ShatteredReach::RulesEngine.apply(state, player: "player_one", action: "move_ship", payload: { "ship_id" => second["id"], "maneuver" => "forward" })
+
+    assert_equal "launch", state["activity_step"]
+    assert_empty state["pending_movement"]
+  end
+
   test "a fired beam depletes shields before hull" do
     state = ShatteredReach::RulesEngine.start
     attacker, target = state["ships"]
