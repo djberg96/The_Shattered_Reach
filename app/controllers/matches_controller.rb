@@ -19,6 +19,23 @@ class MatchesController < ApplicationController
     @match = Match.find(params[:id])
   end
 
+  def download
+    match = Match.find(params[:id])
+    filename = "shattered-reach-turn-#{match.game_state["turn"]}.json"
+    send_data ShatteredReach::SaveGame.dump(match), filename: filename, type: "application/json", disposition: "attachment"
+  end
+
+  def import
+    upload = params[:save_file]
+    raise ShatteredReach::SaveGame::InvalidSave, "Choose a save file to load" unless upload.respond_to?(:read)
+
+    loaded = ShatteredReach::SaveGame.load(upload.read(ShatteredReach::SaveGame::MAX_BYTES + 1))
+    match = Match.create!(title: loaded.fetch(:title), state: loaded.fetch(:state))
+    redirect_to match, notice: "Game loaded."
+  rescue ShatteredReach::SaveGame::InvalidSave => error
+    redirect_to matches_path, alert: error.message
+  end
+
   def action
     match = Match.find(params[:id])
     player = match.game_state["solo"] ? "player_one" : action_params.fetch(:player, "player_one")

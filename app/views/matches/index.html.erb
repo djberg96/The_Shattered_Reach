@@ -1,5 +1,6 @@
 <% content_for :title, "The Shattered Reach" %>
 <main class="landing">
+  <% if notice.present? || alert.present? %><div class="flash-message <%= alert.present? ? "error" : "success" %>" role="status"><%= alert || notice %></div><% end %>
   <section class="hero">
     <div class="hero-art" style="background-image: linear-gradient(90deg, rgba(5,7,20,.84) 0%, rgba(5,7,20,.32) 75%), url('<%= asset_path("shattered_reach/key-art.png") %>')"></div>
     <div class="hero-copy">
@@ -25,5 +26,8 @@
     <article class="fleet-card kestrel" style="background-image: linear-gradient(0deg, rgba(11,16,39,.96), rgba(11,16,39,.1)), url('<%= asset_path("shattered_reach/kestrel-lineup.png") %>')"><h3>Kestrel Freeholds</h3><p>Hardy industrial warships with flexible loadouts.</p></article>
   </section>
 
-  <% if @matches.any? %><section class="resume"><p class="eyebrow">Local command archive</p><h2>Resume a battle</h2><div class="resume-list"><% @matches.each do |match| %><%= link_to match, class: "resume-match" do %><span><%= match.title %></span><small>Turn <%= match.state["turn"] %> · <%= match.updated_at.strftime("%b %-d, %H:%M") %></small><% end %><% end %></div></section><% end %>
+  <section class="resume command-archive">
+    <div class="archive-heading"><div><p class="eyebrow">Local command archive</p><h2><%= @matches.any? ? "Resume a battle" : "Load a battle" %></h2></div><%= form_with url: import_matches_path, multipart: true, class: "load-game-form", data: { turbo: false } do |form| %><%= form.label :save_file, "Load saved game" %><%= form.file_field :save_file, accept: ".json,application/json", required: true %><%= form.submit "Load game", class: "secondary" %><% end %></div>
+    <% if @matches.any? %><div class="resume-list"><% @matches.each do |match| %><%= link_to match, class: "resume-match" do %><span><%= match.title %></span><small>Turn <%= match.state["turn"] %> · <%= match.updated_at.strftime("%b %-d, %H:%M") %></small><% end %><% end %></div><% else %><p class="archive-empty">Start a new battle above or load a previously downloaded save file.</p><% end %>
+  </section>
 </main>

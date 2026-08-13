@@ -35,4 +35,49 @@ class MatchesControllerTest < ActionDispatch::IntegrationTest
     assert_response :unprocessable_content
     assert_match(/not under your command/, response.parsed_body.fetch("error"))
   end
+
+  test "a match can be downloaded as a portable save" do
+    match = Match.create!(title: "Save test", state: ShatteredReach::RulesEngine.start(solo: true))
+
+    get download_match_url(match)
+
+    assert_response :success
+    assert_equal "application/json", response.media_type
+    assert_match(/attachment/, response.headers["content-disposition"])
+    document = JSON.parse(response.body)
+    assert_equal ShatteredReach::SaveGame::FORMAT, document["format"]
+    assert_equal match.state["ships"].map { |ship| ship["id"] }, document.dig("state", "ships").map { |ship| ship["id"] }
+  end
+
+  test "a portable save can be loaded into a new match" do
+    original = Match.create!(title: "Imported patrol", state: ShatteredReach::RulesEngine.start(solo: true, board_size: 20))
+    upload = Tempfile.new(["shattered-reach", ".json"])
+    upload.write(ShatteredReach::SaveGame.dump(original))
+    upload.rewind
+
+    assert_difference("Match.count", 1) do
+      post import_matches_url, params: { save_file: Rack::Test::UploadedFile.new(upload.path, "application/json") }
+    end
+
+    assert_redirected_to Match.order(:created_at).last
+    assert_equal 20, Match.order(:created_at).last.state["board_size"]
+  ensure
+    upload&.close!
+  end
+
+  test "an invalid portable save returns to the archive with an error" do
+    upload = Tempfile.new(["invalid", ".json"])
+    upload.write("not a save")
+    upload.rewind
+
+    assert_no_difference("Match.count") do
+      post import_matches_url, params: { save_file: Rack::Test::UploadedFile.new(upload.path, "application/json") }
+    end
+
+    assert_redirected_to matches_url
+    follow_redirect!
+    assert_select ".flash-message.error", /valid JSON/
+  ensure
+    upload&.close!
+  end
 end
