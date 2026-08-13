@@ -193,7 +193,7 @@ const weaponModule = (weapon, ship, hidden) => {
   return `<article class="weapon-module ${state} ${weapon.id === selectedId ? "selected" : ""}" data-weapon-id="${weapon.id}" data-arcs="${weapon.arc.join(" ")}" data-weapon-label="${profile.label}" tabindex="0">
     <div class="hardpoint"><span>${weaponAbbreviation(weapon)}</span></div>
     <div><h4>${profile.label} <small>${weapon.mount || ""}</small></h4><p>Arc ${weapon.arc.join(" · ")} <i>${resource}</i></p></div>
-    <strong>${hidden ? "UNREVEALED" : state.toUpperCase()}</strong>
+    <strong>${state === "destroyed" ? "DESTROYED" : hidden ? "UNREVEALED" : state.toUpperCase()}</strong>
   </article>`;
 };
 
