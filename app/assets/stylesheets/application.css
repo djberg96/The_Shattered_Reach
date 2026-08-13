@@ -82,7 +82,15 @@ button:hover, .button:hover { transform: translateY(-1px); border-color: rgba(25
 .control-stack .fire small { display:block; margin-top:.2rem; color:var(--quiet); font:.45rem "DM Mono",monospace; letter-spacing:.04em; }
 
 /* Distinct command surfaces keep the blue-violet battlefield from washing through the whole interface. */
-.match-layout.phase-allocation .command-panel {
+.command-panel-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:.65rem; }
+.command-panel-heading > .eyebrow { margin-bottom:.5rem; }
+.allocation-theme-picker { flex:0 0 auto; display:flex; align-items:center; border:1px solid currentColor; color:var(--quiet); background:rgba(0,0,0,.08); font:.4rem "DM Mono",monospace; letter-spacing:.07em; text-transform:uppercase; }
+.allocation-theme-picker span { padding:.35rem .42rem; }
+.allocation-theme-picker button { min-width:2.7rem; padding:.35rem .38rem; border:0; border-left:1px solid currentColor; color:inherit; background:transparent; font:inherit; }
+.allocation-theme-picker button:hover { transform:none; }
+.allocation-theme-picker button[aria-pressed="true"] { color:#111820; background:var(--gold); box-shadow:inset 0 0 0 1px rgba(255,255,255,.3); }
+
+.match-layout.phase-allocation.allocation-theme-dark .command-panel {
   background:
     radial-gradient(circle at 12% 7%, rgba(243,191,98,.11), transparent 24%),
     linear-gradient(155deg, #211a16 0%, #151318 48%, #0d0e13 100%);
@@ -124,6 +132,66 @@ button:hover, .button:hover { transform: translateY(-1px); border-color: rgba(25
   background:#090a0d;
   box-shadow:inset 3px 0 var(--gold);
 }
+
+.match-layout.phase-allocation.allocation-theme-light .command-panel {
+  --ink:#17232b;
+  --quiet:#52626b;
+  --line:rgba(38,57,67,.32);
+  --gold:#b86c08;
+  color:var(--ink);
+  background:
+    repeating-linear-gradient(0deg,rgba(24,46,56,.055) 0 1px,transparent 1px 18px),
+    radial-gradient(circle at 12% 6%,rgba(245,242,226,.42),transparent 30%),
+    linear-gradient(150deg,#c9c9bd 0%,#abb6b3 58%,#8e9b9c 100%);
+  border-right-color:rgba(97,119,125,.72);
+  box-shadow:inset -1rem 0 2rem rgba(30,49,57,.12),inset -1px 0 rgba(255,255,255,.8);
+  scrollbar-color:rgba(90,113,121,.58) rgba(222,228,225,.8);
+  scrollbar-width:thin;
+}
+.allocation-theme-light .command-panel .allocation-title { color:#17232b; text-shadow:0 1px rgba(255,255,255,.75); }
+.allocation-theme-light .command-panel .eyebrow { color:#8e5105; }
+.allocation-theme-light .command-panel .allocation-theme-picker { color:#43575f; background:rgba(238,240,232,.24); }
+.allocation-theme-light .command-panel .allocation-theme-picker button[aria-pressed="true"] { color:#fff; background:#526871; }
+.allocation-theme-light .command-panel .command-ship-picker button {
+  color:#4e6068;
+  border-color:rgba(46,67,76,.32);
+  background:linear-gradient(145deg,rgba(232,232,220,.48),rgba(139,155,156,.34));
+}
+.allocation-theme-light .command-panel .command-ship-picker button.active {
+  color:#fff;
+  border-color:#795017;
+  background:linear-gradient(145deg,#c97d17,#8f5308);
+  box-shadow:0 .3rem .8rem rgba(58,50,34,.2),inset 0 1px rgba(255,255,255,.35);
+}
+.allocation-theme-light .command-panel .shield-allocation-list,
+.allocation-theme-light .command-panel .weapon-allocation-list,
+.allocation-theme-light .command-panel .shield-repair-list {
+  border-color:rgba(48,72,81,.4);
+  background:linear-gradient(145deg,rgba(232,232,220,.38),rgba(130,148,149,.3));
+  box-shadow:inset 0 0 1rem rgba(56,77,83,.06);
+}
+.allocation-theme-light .command-panel .shield-allocation-list legend,
+.allocation-theme-light .command-panel .weapon-allocation-list legend,
+.allocation-theme-light .command-panel .shield-repair-list legend { color:#76511e; }
+.allocation-theme-light .command-panel .shield-allocation-list output { color:#8f5205; }
+.allocation-theme-light .command-panel .control-stack .weapon-allocation {
+  border-color:rgba(42,65,75,.26);
+  background:rgba(235,235,225,.3);
+}
+.allocation-theme-light .command-panel .control-stack .weapon-allocation:hover { border-color:#7e5a25; background:rgba(240,226,191,.55); }
+.allocation-theme-light .command-panel .weapon-allocation em { color:#865008; }
+.allocation-theme-light .command-panel .shield-repair-list select { color:#17232b; border-color:rgba(62,82,89,.48); background:#f7f6ef; }
+.allocation-theme-light .command-panel .allocation-budget {
+  color:#43555d;
+  border-color:rgba(71,91,98,.55);
+  background:rgba(229,231,222,.52);
+  box-shadow:inset 3px 0 #a96309;
+}
+.allocation-theme-light .command-panel .allocation-budget b { color:#8d5003; }
+.allocation-theme-light .command-panel .control-stack > button.secondary { color:#26353c; border-color:rgba(46,67,76,.42); background:rgba(230,232,224,.3); }
+.allocation-theme-light .command-panel .control-stack > button.secondary:hover { background:rgba(235,237,229,.55); }
+.allocation-theme-light .command-panel .allocation-tip [role="tooltip"] { color:#f4f8f9; border-color:#71909b; background:rgba(21,33,40,.98); }
+.allocation-theme-light .command-panel .allocation-tip [role="tooltip"]:after { border-color:#71909b; background:#152128; }
 
 .fleet-status {
   background:
