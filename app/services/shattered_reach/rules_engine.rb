@@ -87,12 +87,13 @@ module ShatteredReach
 
         ship["max_front_shields"] ||= spec[:front_shields]
         ship["max_aft_shields"] ||= spec[:aft_shields]
-        allocation = ship["allocation"] ||= { "speed" => 0, "shields" => {}, "weapons" => [] }
+        allocation = ship["allocation"] ||= { "speed" => 0, "shields" => {}, "shield_repair" => nil, "weapons" => [] }
         unless allocation["shields"].is_a?(Hash)
           allocation["shields"] = { "front" => allocation["shields"].to_i, "aft" => 0 }
         end
         allocation["shields"]["front"] ||= 0
         allocation["shields"]["aft"] ||= 0
+        allocation["shield_repair"] = nil unless %w[front aft].include?(allocation["shield_repair"])
         ship["movement"] ||= { "hexes_since_turn" => 0, "last_action" => nil }
         ship["movement_path"] = [ship["position"].first(2)] unless ship["movement_path"].is_a?(Array) && ship["movement_path"].any?
       end
@@ -125,7 +126,7 @@ module ShatteredReach
         "id" => "#{player}-#{key}", "key" => key, "player" => player, "name" => spec[:name], "fleet" => spec[:fleet],
         "size" => spec[:size], "position" => position, "energy" => spec[:energy], "hull" => spec[:hull], "max_hull" => spec[:hull],
         "shields" => { "front" => spec[:front_shields], "aft" => spec[:aft_shields] }, "max_front_shields" => spec[:front_shields], "max_aft_shields" => spec[:aft_shields],
-        "allocation" => { "speed" => 0, "shields" => { "front" => 0, "aft" => 0 }, "weapons" => [] },
+        "allocation" => { "speed" => 0, "shields" => { "front" => 0, "aft" => 0 }, "shield_repair" => nil, "weapons" => [] },
         "locked" => false, "special_available" => spec[:size] != "large", "weapons" => spec[:weapons].map.with_index { |w, i| w.stringify_keys.merge("id" => "w#{i}", "destroyed" => false, "fired" => false) },
         "damage" => { "engines" => 0, "weapons" => 0 }, "movement" => { "hexes_since_turn" => 0, "last_action" => nil },
         "movement_path" => [position.first(2)], "destroyed" => false
@@ -143,11 +144,16 @@ module ShatteredReach
       aft_shields = payload.fetch("aft_shields", legacy_shields.is_a?(Hash) ? legacy_shields.fetch("aft", 0) : 0).to_i.clamp(0, shield_cap(ship))
       raise IllegalAction, "Forward shield is collapsed and cannot be reinforced" if front_shields.positive? && ship.dig("shields", "front").to_i.zero?
       raise IllegalAction, "Aft shield is collapsed and cannot be reinforced" if aft_shields.positive? && ship.dig("shields", "aft").to_i.zero?
+      shield_repair = payload["shield_repair"].presence
+      raise IllegalAction, "Choose the forward or aft shield for repair" if shield_repair && !%w[front aft].include?(shield_repair)
+      if shield_repair && ship.dig("shields", shield_repair).to_i >= maximum_shields(ship, shield_repair)
+        raise IllegalAction, "#{shield_repair.capitalize} shield is already at full strength"
+      end
       weapons = Array(payload["weapons"]).map(&:to_s).uniq
       selected = ship["weapons"].select { |w| weapons.include?(w["id"]) && !w["destroyed"] }
-      cost = speed + front_shields + aft_shields + selected.sum { |w| GameDefinition::WEAPONS.fetch(w[:type] || w["type"])[:energy] }
+      cost = speed + front_shields + aft_shields + (shield_repair ? 2 : 0) + selected.sum { |w| GameDefinition::WEAPONS.fetch(w[:type] || w["type"])[:energy] }
       raise IllegalAction, "Allocation needs #{cost} energy; ship has #{available_energy(ship)}" if cost > available_energy(ship)
-      ship["allocation"] = { "speed" => speed, "shields" => { "front" => front_shields, "aft" => aft_shields }, "weapons" => selected.map { |w| w["id"] } }
+      ship["allocation"] = { "speed" => speed, "shields" => { "front" => front_shields, "aft" => aft_shields }, "shield_repair" => shield_repair, "weapons" => selected.map { |w| w["id"] } }
       log!(state, "#{ship["name"]} has set its allocation.")
     end
     private_class_method :allocate!
@@ -611,8 +617,9 @@ module ShatteredReach
       state["ships"].each do |ship|
         next if ship["destroyed"]
 
+        repair_shield!(state, ship)
         ship["locked"] = false
-        ship["allocation"] = { "speed" => 0, "shields" => { "front" => 0, "aft" => 0 }, "weapons" => [] }
+        ship["allocation"] = { "speed" => 0, "shields" => { "front" => 0, "aft" => 0 }, "shield_repair" => nil, "weapons" => [] }
         ship["weapons"].each { |weapon| weapon["fired"] = false }
         ship["movement"] = { "hexes_since_turn" => 0, "last_action" => nil }
         ship["movement_path"] = [ship["position"].first(2)]
@@ -620,6 +627,18 @@ module ShatteredReach
       log!(state, "Turn #{state["turn"]}. Allocate energy in secret.")
     end
     private_class_method :finish_turn!
+
+    def self.repair_shield!(state, ship)
+      bank = ship.dig("allocation", "shield_repair")
+      return unless %w[front aft].include?(bank)
+
+      maximum = maximum_shields(ship, bank)
+      return if ship.dig("shields", bank).to_i >= maximum
+
+      ship["shields"][bank] += 1
+      log!(state, "#{ship["name"]} repairs one #{bank} shield box.")
+    end
+    private_class_method :repair_shield!
 
     def self.shuffled_card_indices(state)
       indices = [0, 1, 2, 3]
@@ -651,6 +670,7 @@ module ShatteredReach
     end
     def self.available_energy(ship) = [ship["energy"] - ship["damage"]["engines"], 0].max
     def self.shield_cap(ship) = { "small" => 1, "medium" => 2, "large" => 3 }.fetch(ship["size"])
+    def self.maximum_shields(ship, bank) = ship.fetch("max_#{bank}_shields")
     def self.label(player) = player == "player_one" ? "Player One" : "Player Two"
     def self.log!(state, entry) = state["log"] << entry
     def self.check_victory!(state)
@@ -658,6 +678,6 @@ module ShatteredReach
       state["winner"] = alive.first if alive.length == 1
       log!(state, "#{label(state["winner"])} wins the battle!") if state["winner"]
     end
-    private_class_method :ships_for, :owned_ship!, :require_phase!, :require_activity_step!, :available_energy, :shield_cap, :label, :log!, :check_victory!
+    private_class_method :ships_for, :owned_ship!, :require_phase!, :require_activity_step!, :available_energy, :shield_cap, :maximum_shields, :label, :log!, :check_victory!
   end
 end

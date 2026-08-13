@@ -105,6 +105,10 @@ module ShatteredReach
           "front" => allocation.dig("shields", "front").to_i.clamp(0, shield_cap),
           "aft" => allocation.dig("shields", "aft").to_i.clamp(0, shield_cap)
         }
+        repair = allocation["shield_repair"]
+        allocation["shield_repair"] = if %w[front aft].include?(repair) && ship.dig("shields", repair) < spec.fetch("#{repair}_shields".to_sym)
+                                          repair
+                                        end
         ship["damage"] = {
           "engines" => ship.dig("damage", "engines").to_i.clamp(0, spec[:energy]),
           "weapons" => ship.dig("damage", "weapons").to_i.clamp(0, spec[:weapons].length)

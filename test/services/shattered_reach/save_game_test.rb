@@ -29,6 +29,17 @@ class ShatteredReach::SaveGameTest < ActiveSupport::TestCase
     assert_not state.key?("movement_undo")
   end
 
+  test "a scheduled shield repair survives save and load" do
+    state = ShatteredReach::RulesEngine.start
+    state["ships"].first["shields"]["front"] -= 1
+    state["ships"].first["allocation"]["shield_repair"] = "front"
+    match = Match.create!(title: "Repair Detail", state: state)
+
+    loaded = ShatteredReach::SaveGame.load(ShatteredReach::SaveGame.dump(match))[:state]
+
+    assert_equal "front", loaded.dig("ships", 0, "allocation", "shield_repair")
+  end
+
   test "loading rejects malformed and unrecognized files" do
     error = assert_raises(ShatteredReach::SaveGame::InvalidSave) { ShatteredReach::SaveGame.load("not json") }
     assert_match(/valid JSON/, error.message)

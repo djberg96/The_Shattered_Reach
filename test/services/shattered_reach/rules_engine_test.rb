@@ -129,6 +129,49 @@ class ShatteredReach::RulesEngineTest < ActiveSupport::TestCase
     assert_equal 0, target.dig("allocation", "shields", "front")
   end
 
+  test "shield repair costs two energy and restores one box at end of turn" do
+    state = ShatteredReach::RulesEngine.start
+    ship = state["ships"].first
+    ship["shields"]["front"] -= 2
+
+    state = ShatteredReach::RulesEngine.apply(state, player: ship["player"], action: "allocate", payload: { "ship_id" => ship["id"], "speed" => 9, "shield_repair" => "front" })
+    assert_equal "front", state["ships"].first.dig("allocation", "shield_repair")
+
+    ShatteredReach::RulesEngine.send(:finish_turn!, state)
+
+    repaired = state["ships"].first
+    assert_equal repaired["max_front_shields"] - 1, repaired.dig("shields", "front")
+    assert_nil repaired.dig("allocation", "shield_repair")
+    assert_includes state["log"], "#{repaired["name"]} repairs one front shield box."
+  end
+
+  test "a fully collapsed shield can be repaired" do
+    state = ShatteredReach::RulesEngine.start
+    ship = state["ships"].first
+    ship["shields"]["aft"] = 0
+
+    state = ShatteredReach::RulesEngine.apply(state, player: ship["player"], action: "allocate", payload: { "ship_id" => ship["id"], "shield_repair" => "aft" })
+    ShatteredReach::RulesEngine.send(:finish_turn!, state)
+
+    assert_equal 1, state["ships"].first.dig("shields", "aft")
+  end
+
+  test "shield repair cannot target a full bank or exceed available energy" do
+    state = ShatteredReach::RulesEngine.start
+    ship = state["ships"].first
+
+    full_error = assert_raises(ShatteredReach::RulesEngine::IllegalAction) do
+      ShatteredReach::RulesEngine.apply(state, player: ship["player"], action: "allocate", payload: { "ship_id" => ship["id"], "shield_repair" => "front" })
+    end
+    assert_match(/full strength/, full_error.message)
+
+    ship["shields"]["front"] -= 1
+    energy_error = assert_raises(ShatteredReach::RulesEngine::IllegalAction) do
+      ShatteredReach::RulesEngine.apply(state, player: ship["player"], action: "allocate", payload: { "ship_id" => ship["id"], "speed" => 10, "shield_repair" => "front" })
+    end
+    assert_match(/12 energy/, energy_error.message)
+  end
+
   test "both locked allocations begin the impulse phase" do
     state = ShatteredReach::RulesEngine.start
     state["ships"].each do |ship|
