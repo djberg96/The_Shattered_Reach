@@ -361,7 +361,7 @@ module ShatteredReach
           state["missiles"].delete_if { |missile| missile["id"] == target["id"] }
           log!(state, "#{attacker["name"]} destroys a seeker missile with #{profile[:label]} (#{roll}).")
         else
-          damage = apply_damage!(state, target, profile[:damage][bracket], attacker)
+          damage = apply_damage!(state, target, profile[:damage][bracket], attacker["position"])
           log!(state, "#{attacker["name"]} hits #{target["name"]} with #{profile[:label]} (#{roll}).")
         end
       else
@@ -448,7 +448,7 @@ module ShatteredReach
           missile["position"][2] = direction
           next unless missile["position"].first(2) == target["position"].first(2)
 
-          damage = apply_damage!(state, target, 3, nil)
+          damage = apply_damage!(state, target, 3, origin)
           log!(state, "Seeker missile hits #{target["name"]} for 3 damage.")
           record_missile_impact!(state, missile, target, origin, damage)
           check_victory!(state)
@@ -528,7 +528,7 @@ module ShatteredReach
     end
     private_class_method :finish_impulse!
 
-    def self.apply_damage!(state, target, amount, _attacker)
+    def self.apply_damage!(state, target, amount, source_position)
       result = {
         "amount" => amount,
         "shield_bank" => nil,
@@ -537,9 +537,10 @@ module ShatteredReach
         "hull" => 0,
         "engines" => 0,
         "weapons" => [],
-        "destroyed" => false
+        "destroyed" => false,
+        "before" => damage_snapshot(target)
       }
-      shield = target["shields"]["front"] > 0 ? "front" : "aft"
+      shield = shield_bank_for(target, source_position)
       result["shield_bank"] = shield
       reinforcement = target.dig("allocation", "shields", shield).to_i
       reinforced = [reinforcement, amount].min
@@ -550,31 +551,56 @@ module ShatteredReach
       result["shield_absorbed"] = absorbed
       target["shields"][shield] -= absorbed
       remaining = amount - absorbed
-      return result if remaining.zero?
-      remaining.times do
-        case next_roll(state)
-        when 1..3
-          target["hull"] -= 1
-          result["hull"] += 1
-        when 4..5
-          target["damage"]["engines"] += 1
-          result["engines"] += 1
-        else
-          available = target["weapons"].find { |weapon| !weapon["destroyed"] }
-          if available
-            available["destroyed"] = true
-            result["weapons"] << { "id" => available["id"], "mount" => available["mount"], "type" => available["type"] }
-          else
+      if remaining.positive?
+        remaining.times do
+          case next_roll(state)
+          when 1..3
             target["hull"] -= 1
             result["hull"] += 1
+          when 4..5
+            target["damage"]["engines"] += 1
+            result["engines"] += 1
+          else
+            available = target["weapons"].find { |weapon| !weapon["destroyed"] }
+            if available
+              available["destroyed"] = true
+              result["weapons"] << { "id" => available["id"], "mount" => available["mount"], "type" => available["type"] }
+            else
+              target["hull"] -= 1
+              result["hull"] += 1
+            end
           end
         end
       end
       target["destroyed"] = true if target["hull"] <= 0
       result["destroyed"] = target["destroyed"]
+      result["after"] = damage_snapshot(target)
       result
     end
     private_class_method :apply_damage!
+
+    def self.shield_bank_for(target, source_position)
+      range = distance(target["position"], source_position)
+      incoming_directions = DIRECTIONS.each_index.select do |direction|
+        delta = DIRECTIONS[direction]
+        distance([target["position"][0] + delta[0], target["position"][1] + delta[1]], source_position) < range
+      end
+      forward_directions = [-1, 0, 1].map { |offset| (target["position"][2] + offset) % 6 }
+      (incoming_directions & forward_directions).any? ? "front" : "aft"
+    end
+    private_class_method :shield_bank_for
+
+    def self.damage_snapshot(ship)
+      {
+        "shields" => ship["shields"].dup,
+        "shield_reinforcement" => ship.dig("allocation", "shields").dup,
+        "hull" => ship["hull"],
+        "engines" => ship.dig("damage", "engines").to_i,
+        "destroyed_weapon_ids" => ship["weapons"].select { |weapon| weapon["destroyed"] }.map { |weapon| weapon["id"] },
+        "destroyed" => ship["destroyed"]
+      }
+    end
+    private_class_method :damage_snapshot
 
     def self.finish_turn!(state)
       check_victory!(state)

@@ -210,18 +210,39 @@ const weaponChart = (type) => {
 const damageReport = (event) => {
   if (!event?.damage) return "";
   const damage = event.damage;
+  const before = damage.before || {};
+  const after = damage.after || {};
   const details = [];
-  if (damage.reinforcement_absorbed > 0) details.push(`${damage.shield_bank} reinforcement absorbed ${damage.reinforcement_absorbed}`);
-  if (damage.shield_absorbed > 0) details.push(`${damage.shield_bank} shield −${damage.shield_absorbed}`);
-  if (damage.hull > 0) details.push(`hull −${damage.hull}`);
-  if (damage.engines > 0) details.push(`engines −${damage.engines}`);
+  if (damage.reinforcement_absorbed > 0) details.push(`${damage.shield_bank} reinforcement ${before.shield_reinforcement?.[damage.shield_bank] ?? "?"} → ${after.shield_reinforcement?.[damage.shield_bank] ?? "?"}`);
+  if (damage.shield_absorbed > 0) details.push(`${damage.shield_bank} shield ${before.shields?.[damage.shield_bank] ?? "?"} → ${after.shields?.[damage.shield_bank] ?? "?"}`);
+  if (damage.hull > 0) details.push(`hull ${before.hull ?? "?"} → ${after.hull ?? "?"}`);
+  if (damage.engines > 0) details.push(`engine damage ${before.engines ?? "?"} → ${after.engines ?? "?"}`);
   (damage.weapons || []).forEach((weapon) => details.push(`${weapon.mount || weaponAbbreviation(weapon)} ${WEAPONS[weapon.type]?.label || "weapon"} destroyed`));
   if (damage.destroyed) details.push("ship destroyed");
   const summary = details.length ? details : ["impact fully absorbed"];
   return `<aside class="damage-report" role="status" aria-live="assertive"><div><span>Damage report</span><b>${event.weapon_label} impact · ${damage.amount} damage</b></div><ul>${summary.map((detail) => `<li>${detail}</li>`).join("")}</ul></aside>`;
 };
 
+const shipAtDamageSnapshot = (ship, damageEvent) => {
+  const snapshot = damageEvent?.damage?.after;
+  if (!snapshot) return ship;
+  const destroyedWeaponIds = snapshot.destroyed_weapon_ids || [];
+  return {
+    ...ship,
+    shields: { ...ship.shields, ...snapshot.shields },
+    hull: snapshot.hull,
+    destroyed: snapshot.destroyed,
+    allocation: {
+      ...ship.allocation,
+      shields: { ...ship.allocation.shields, ...snapshot.shield_reinforcement }
+    },
+    damage: { ...ship.damage, engines: snapshot.engines },
+    weapons: ship.weapons.map((weapon) => ({ ...weapon, destroyed: destroyedWeaponIds.includes(weapon.id) }))
+  };
+};
+
 export function shipSchematic(ship, state, player, damageEvent = null) {
+  ship = shipAtDamageSnapshot(ship, damageEvent);
   const privateAllocation = state.phase === "allocation" && ship.player !== player;
   const availableEnergy = Math.max(ship.energy - ship.damage.engines, 0);
   const maxFrontShields = ship.max_front_shields || ship.shields.front;

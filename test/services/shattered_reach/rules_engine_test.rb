@@ -123,7 +123,7 @@ class ShatteredReach::RulesEngineTest < ActiveSupport::TestCase
     target["allocation"]["shields"] = { "front" => 2, "aft" => 0 }
     before = target["shields"]["front"]
 
-    ShatteredReach::RulesEngine.send(:apply_damage!, state, target, 2, state["ships"].first)
+    ShatteredReach::RulesEngine.send(:apply_damage!, state, target, 2, state["ships"].first["position"])
 
     assert_equal before, target["shields"]["front"]
     assert_equal 0, target.dig("allocation", "shields", "front")
@@ -207,7 +207,58 @@ class ShatteredReach::RulesEngineTest < ActiveSupport::TestCase
     assert_equal({
       "amount" => 1, "shield_bank" => "front", "reinforcement_absorbed" => 0,
       "shield_absorbed" => 1, "hull" => 0, "engines" => 0, "weapons" => [], "destroyed" => false
-    }, result["combat_events"].last["damage"])
+    }, result["combat_events"].last["damage"].except("before", "after"))
+    assert_equal before_shield, result["combat_events"].last.dig("damage", "before", "shields", "front")
+    assert_equal before_shield - 1, result["combat_events"].last.dig("damage", "after", "shields", "front")
+  end
+
+  test "damage strikes the shield hemisphere facing the attacker" do
+    state = ShatteredReach::RulesEngine.start
+    target = state["ships"].first
+    target["position"] = [5, 5, 0]
+    target["shields"] = { "front" => 6, "aft" => 5 }
+
+    front = ShatteredReach::RulesEngine.send(:apply_damage!, state, target, 1, [7, 5, 3])
+    aft = ShatteredReach::RulesEngine.send(:apply_damage!, state, target, 2, [3, 5, 0])
+
+    assert_equal "front", front["shield_bank"]
+    assert_equal 5, target.dig("shields", "front")
+    assert_equal "aft", aft["shield_bank"]
+    assert_equal 3, target.dig("shields", "aft")
+  end
+
+  test "a collapsed struck shield does not divert damage to the opposite bank" do
+    state = ShatteredReach::RulesEngine.start
+    target = state["ships"].first
+    target["position"] = [5, 5, 0]
+    target["shields"] = { "front" => 0, "aft" => 5 }
+    target["hull"] = 7
+    state["seed"] = 1
+
+    damage = ShatteredReach::RulesEngine.send(:apply_damage!, state, target, 1, [7, 5, 3])
+
+    assert_equal "front", damage["shield_bank"]
+    assert_equal 0, damage["shield_absorbed"]
+    assert_equal 5, target.dig("shields", "aft")
+    assert_equal 1, damage.values_at("hull", "engines").sum + damage["weapons"].length
+  end
+
+  test "sequential impacts preserve the state after each hit" do
+    state = ShatteredReach::RulesEngine.start
+    target = state["ships"].first
+    target["position"] = [5, 5, 0]
+    target["shields"] = { "front" => 5, "aft" => 5 }
+    target["allocation"]["shields"] = { "front" => 0, "aft" => 0 }
+    state["seed"] = 1
+
+    first = ShatteredReach::RulesEngine.send(:apply_damage!, state, target, 3, [7, 5, 3])
+    second = ShatteredReach::RulesEngine.send(:apply_damage!, state, target, 3, [7, 5, 3])
+
+    assert_equal 5, first.dig("before", "shields", "front")
+    assert_equal 2, first.dig("after", "shields", "front")
+    assert_equal 2, second.dig("before", "shields", "front")
+    assert_equal 0, second.dig("after", "shields", "front")
+    assert_equal 1, second.values_at("hull", "engines").sum + second["weapons"].length
   end
 
   test "a penetrating hit records each damaged system for presentation" do
