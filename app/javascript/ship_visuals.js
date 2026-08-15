@@ -305,7 +305,7 @@ export function shipSchematic(ship, state, player, damageEvent = null, tacticalA
             <div class="schematic-view-controls"><span>Engineering view</span><button class="toggle-arcs" type="button" aria-pressed="false">Show firing arcs</button></div>
             ${arcHexCluster(ship)}
             <div class="engineering-shield-bank forward" aria-hidden="false">${shieldBank("Forward shield", maxFrontShields, ship.shields.front, shieldColumns, frontShieldDamaged)}</div>
-            ${shipGlyph(ship, `ship-glyph-schematic fleet-${ship.fleet}`, { hardpoints: true, hidden: privateAllocation, damagedWeaponIds, art: tacticalArt })}
+            ${shipGlyph(ship, `ship-glyph-schematic fleet-${ship.fleet} ship-${ship.key}`, { hardpoints: true, hidden: privateAllocation, damagedWeaponIds, art: tacticalArt })}
             <div class="engineering-shield-bank aft" aria-hidden="false">${shieldBank("Aft shield", maxAftShields, ship.shields.aft, shieldColumns, aftShieldDamaged)}</div>
           </div>
           <div class="weapon-rack">${ship.weapons.map((weapon) => weaponModule(weapon, ship, privateAllocation)).join("")}</div>
