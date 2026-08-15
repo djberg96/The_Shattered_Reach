@@ -46,6 +46,17 @@ class MatchesControllerTest < ActionDispatch::IntegrationTest
     assert_equal 20, Match.last.state["board_size"]
   end
 
+  test "match page exposes tactical artwork for every ship class" do
+    match = Match.create!(title: "Tactical artwork", state: ShatteredReach::RulesEngine.start(solo: true))
+
+    get match_url(match)
+
+    assert_response :success
+    manifest = JSON.parse(css_select("[data-tactical-art]").first["data-tactical-art"])
+    assert_equal ShatteredReach::GameDefinition::SHIPS.keys.map(&:to_s).sort, manifest.keys.sort
+    assert manifest.values.all? { |path| path.include?("/assets/ships/tactical/") }
+  end
+
   test "game commands are not confused with the Rails action parameter" do
     match = Match.create!(title: "Command test", state: ShatteredReach::RulesEngine.start(solo: true))
     ship = match.state["ships"].first

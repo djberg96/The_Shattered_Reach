@@ -5,6 +5,7 @@ const csrf = () => document.querySelector("meta[name='csrf-token']")?.content;
 export function mountMatch(root) {
   let state = JSON.parse(root.dataset.matchState);
   const matchId = root.dataset.matchId;
+  const tacticalArt = JSON.parse(root.dataset.tacticalArt || "{}");
   let player = "player_one";
   let activeShipId = state.ships.find((ship) => ship.player === player && !ship.destroyed)?.id || null;
   let zoom = 1;
@@ -196,7 +197,9 @@ export function mountMatch(root) {
     const selectable = !state.solo || ship.player === player;
     const moving = state.pending_movement?.[0] === ship.id;
     const target = targetStatus(ship);
-    return `<g class="ship-token fleet-${ship.fleet} ${ship.destroyed ? "destroyed" : ""} ${moving ? "movement-active" : ""} ${target ? `target-candidate ${target}` : selectable ? "selectable" : "ai-opponent"}" data-ship-hover-id="${ship.id}" ${target ? `data-target-id="${ship.id}" role="button" tabindex="0" aria-label="${ship.name}, ${target} target"` : selectable ? `data-ship-id="${ship.id}" role="button" tabindex="0" aria-label="Open ${ship.name} schematic"` : `aria-label="${ship.name}, AI-controlled opponent"`} transform="translate(${x} ${y}) rotate(${120 - (facing * 60)}) scale(.86)"><circle class="ship-hover-area" r="32"/>${shipHull(ship)}</g>`;
+    const art = tacticalArt[ship.key];
+    const visual = art ? `<image class="ship-art" href="${art}" x="-44" y="-44" width="88" height="88" preserveAspectRatio="xMidYMid meet"/>` : shipHull(ship);
+    return `<g class="ship-token fleet-${ship.fleet} ${ship.destroyed ? "destroyed" : ""} ${moving ? "movement-active" : ""} ${target ? `target-candidate ${target}` : selectable ? "selectable" : "ai-opponent"}" data-ship-hover-id="${ship.id}" ${target ? `data-target-id="${ship.id}" role="button" tabindex="0" aria-label="${ship.name}, ${target} target"` : selectable ? `data-ship-id="${ship.id}" role="button" tabindex="0" aria-label="Open ${ship.name} schematic"` : `aria-label="${ship.name}, AI-controlled opponent"`} transform="translate(${x} ${y}) rotate(${120 - (facing * 60)}) scale(.86)"><circle class="ship-target-outline" r="36"/><circle class="ship-hover-area" r="36"/>${visual}</g>`;
   };
   const missileCounter = (missile) => {
     const [q, r, facing] = missile.position; const [x, y] = center(q, r);

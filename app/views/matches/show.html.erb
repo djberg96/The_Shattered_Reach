@@ -1,2 +1,9 @@
 <% content_for :title, "#{@match.title} — The Shattered Reach" %>
-<div data-match-id="<%= @match.id %>" data-match-state="<%= json_escape(@match.game_state.to_json) %>"></div>
+<% tactical_ship_art = %w[
+  aurelian_frigate aurelian_cruiser aurelian_battleship
+  veyr_frigate veyr_cruiser veyr_battleship
+  kestrel_frigate kestrel_cruiser kestrel_battleship
+].to_h { |key| [key, asset_path("ships/tactical/#{key}.png")] } %>
+<div data-match-id="<%= @match.id %>"
+     data-match-state="<%= json_escape(@match.game_state.to_json) %>"
+     data-tactical-art="<%= json_escape(tactical_ship_art.to_json) %>"></div>
