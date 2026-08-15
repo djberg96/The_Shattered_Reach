@@ -42,7 +42,7 @@ button:hover, .button:hover { transform: translateY(-1px); border-color: rgba(25
 .ship-card { grid-template-columns:3.6rem 1fr; padding:.9rem .35rem; cursor:pointer; transition:background .15s ease,transform .15s ease; }
 .ship-card:hover,.ship-card:focus-visible { background:rgba(255,255,255,.045); outline:1px solid rgba(255,255,255,.22); transform:translateX(-2px); }
 .ship-card.opponent-schematic .schematic-cue { color:var(--blue); opacity:.85; }
-.ship-card-icon { display:grid; place-items:center; min-width:0; }.ship-glyph-card { width:3.25rem; height:3.25rem; transform:rotate(-30deg); overflow:visible; }
+.ship-card-icon { display:grid; place-items:center; min-width:0; }.ship-glyph-card { width:3.25rem; height:3.25rem; transform:rotate(-30deg); overflow:visible; }.ship-art-card { width:3.75rem; height:3.75rem; object-fit:contain; transform:rotate(-30deg); filter:drop-shadow(0 0 .35rem rgba(243,191,98,.55)); }.ship-card.fleet-veyr .ship-art-card { filter:drop-shadow(0 0 .35rem rgba(119,167,255,.58)); }.ship-card.fleet-kestrel .ship-art-card { filter:drop-shadow(0 0 .35rem rgba(225,141,93,.6)); }
 .schematic-cue { display:block; margin-top:.4rem; color:var(--quiet); font:.5rem "DM Mono",monospace; letter-spacing:.09em; text-transform:uppercase; opacity:.7; }.ship-card:hover .schematic-cue { color:var(--ink); opacity:1; }
 
 .schematic-backdrop { position:fixed; inset:0; z-index:20; overflow:auto; padding:clamp(1rem,3vw,3rem); background:rgba(2,4,13,.88); backdrop-filter:blur(12px); display:grid; place-items:center; }

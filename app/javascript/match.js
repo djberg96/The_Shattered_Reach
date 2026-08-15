@@ -58,9 +58,9 @@ export function mountMatch(root) {
     if (!weapon || state.activity_step !== "fire" || targetOwner(target) === player || target.destroyed) return null;
     return directWeaponLegal(attacker, target, weapon) ? "legal" : "illegal";
   };
-  const shipCard = (ship) => { const target = targetStatus(ship); const relationship = state.solo ? ship.player === player ? "Your ship" : "AI opponent" : ship.player === "player_one" ? "Player One" : "Player Two"; const concealed = state.phase === "allocation" && ship.player !== player; return `
+  const shipCard = (ship) => { const target = targetStatus(ship); const relationship = state.solo ? ship.player === player ? "Your ship" : "AI opponent" : ship.player === "player_one" ? "Player One" : "Player Two"; const concealed = state.phase === "allocation" && ship.player !== player; const art = tacticalArt[ship.key]; const icon = art ? `<img class="ship-art-card" src="${art}" alt=""/>` : shipGlyph(ship, "ship-glyph-card"); return `
     <article class="ship-card fleet-${ship.fleet} ${ship.destroyed ? "destroyed" : ""} ${target ? `target-candidate ${target}` : `selectable ${ship.player !== player ? "opponent-schematic" : ""}`}" data-ship-hover-id="${ship.id}" ${target ? `data-target-id="${ship.id}" role="button" tabindex="0" aria-label="${ship.name}, ${target} target"` : `data-ship-id="${ship.id}" role="button" tabindex="0" aria-label="Open ${ship.name} schematic${concealed ? "; allocation concealed" : ""}"`}>
-      <div class="ship-card-icon">${shipGlyph(ship, "ship-glyph-card")}</div>
+      <div class="ship-card-icon">${icon}</div>
       <div><p class="eyebrow">${relationship} · Ship ${ship.fleet_index || 1} · ${fleetName(ship.fleet)} · ${ship.size}</p><h3>${ship.name}</h3>
       <dl><div><dt>Hull</dt><dd>${ship.hull}/${ship.max_hull}</dd></div><div><dt>Shields</dt><dd>F ${ship.shields.front} · A ${ship.shields.aft}</dd></div><div><dt>Energy</dt><dd>${ship.energy - ship.damage.engines}</dd></div></dl><span class="schematic-cue">${target ? target === "legal" ? "Legal target · inspect or fire" : "Inspect firing solution" : concealed ? "Open schematic · allocation concealed ↗" : "Open schematic ↗"}</span></div>
     </article>`; };
