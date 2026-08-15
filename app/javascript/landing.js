@@ -21,6 +21,9 @@ export function mountLanding(root) {
   const stepHeading = setupDialog?.querySelector("[data-step-heading]");
   const stepDescription = setupDialog?.querySelector("[data-step-description]");
   const submitButton = setupDialog?.querySelector("[data-begin-game]");
+  const shipCatalog = root.querySelector("[data-ship-catalog]");
+  const catalogChoices = Array.from(shipCatalog?.querySelectorAll("[data-catalog-ship]") || []);
+  const catalogPanels = Array.from(shipCatalog?.querySelectorAll("[data-catalog-panel]") || []);
 
   const selectedMode = () => modeControls.find((control) => control.checked)?.value || "hotseat";
 
@@ -84,4 +87,29 @@ export function mountLanding(root) {
   setupDialog?.querySelector("[data-next-setup]")?.addEventListener("click", () => showStep(2));
   setupDialog?.querySelector("[data-previous-setup]")?.addEventListener("click", () => showStep(1));
   modeControls.forEach((control) => control.addEventListener("change", configureDeployment));
+
+  const selectCatalogShip = (key, focusPanel = false) => {
+    catalogChoices.forEach((choice) => {
+      const selected = choice.dataset.catalogShip === key;
+      choice.classList.toggle("selected", selected);
+      choice.setAttribute("aria-selected", String(selected));
+      choice.tabIndex = selected ? 0 : -1;
+    });
+    catalogPanels.forEach((panel) => {
+      panel.hidden = panel.dataset.catalogPanel !== key;
+    });
+    if (focusPanel) catalogPanels.find((panel) => panel.dataset.catalogPanel === key)?.focus();
+  };
+
+  catalogChoices.forEach((choice, index) => {
+    choice.addEventListener("click", () => selectCatalogShip(choice.dataset.catalogShip));
+    choice.addEventListener("keydown", (event) => {
+      if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+      event.preventDefault();
+      const nextIndex = event.key === "Home" ? 0 : event.key === "End" ? catalogChoices.length - 1 : (index + (event.key === "ArrowDown" ? 1 : -1) + catalogChoices.length) % catalogChoices.length;
+      const nextChoice = catalogChoices[nextIndex];
+      selectCatalogShip(nextChoice.dataset.catalogShip);
+      nextChoice.focus();
+    });
+  });
 }

@@ -9,6 +9,7 @@ class MatchesControllerTest < ActionDispatch::IntegrationTest
     assert_select "h1", /SHATTERED/
     assert_select "button[data-open-dialog='new-game-dialog']", text: "New game"
     assert_select "button[data-open-dialog='load-game-dialog']", text: "Load game"
+    assert_select "button[data-open-dialog='ship-catalog-dialog']", text: "View ships"
     assert_select "dialog#new-game-dialog [data-setup-step='1']"
     assert_select "dialog#new-game-dialog [data-setup-step='2'][hidden]"
     assert_select "[data-ai-options][hidden] input", count: 2
@@ -16,6 +17,9 @@ class MatchesControllerTest < ActionDispatch::IntegrationTest
     ShatteredReach::GameDefinition::SHIPS.each_value do |ship|
       assert_select "option", text: /#{Regexp.escape(ship[:name].split.last)}/
     end
+    assert_select "dialog#ship-catalog-dialog [data-catalog-ship]", count: 9
+    assert_select "dialog#ship-catalog-dialog [data-catalog-panel]", count: 9
+    assert_select "dialog#ship-catalog-dialog [data-catalog-panel]:not([hidden])", count: 1
   end
 
   test "a hot-seat skirmish accepts duplicate three-ship fleets" do

@@ -1,6 +1,18 @@
 <% content_for :title, "The Shattered Reach" %>
 <% ship_options = ShatteredReach::GameDefinition::SHIPS.map { |key, ship| ["#{ShatteredReach::GameDefinition::FLEETS.fetch(ship[:fleet])[:name]} · #{ship[:name].delete_prefix("#{ShatteredReach::GameDefinition::FLEETS.fetch(ship[:fleet])[:name].split.first} ")} · #{ship[:size].capitalize}", key] } %>
 <% optional_ship_options = [["No ship", ""]] + ship_options %>
+<% ship_turn_modes = { "small" => [0, 1, 2], "medium" => [1, 2, 3], "large" => [2, 3, 4] } %>
+<% ship_doctrines = {
+  "aurelian_frigate" => "A fast beam escort built to rake either flank while its forward driver opens the engagement.",
+  "aurelian_cruiser" => "A balanced line cruiser whose paired beam batteries and omnidirectional driver reward disciplined positioning.",
+  "aurelian_battleship" => "The Compact’s radiant capital ship: a broad beam arsenal wrapped around a heavily shielded command hull.",
+  "veyr_frigate" => "A lean missile hunter with an aft-capable beam battery and enough speed to dictate contact.",
+  "veyr_cruiser" => "A flexible strike cruiser combining paired beam broadsides, a forward driver, and a seeker rack.",
+  "veyr_battleship" => "A severe long-range weapons platform centered on twin mass drivers and a deep missile magazine.",
+  "kestrel_frigate" => "A compact freeholder raider that trades hull mass for forward beams and twin seeker launchers.",
+  "kestrel_cruiser" => "A stubborn missile carrier with strong shields, high reactor output, and layered seeker coverage.",
+  "kestrel_battleship" => "The Freeholds’ improvised leviathan, carrying three beam batteries and a formidable missile broadside."
+} %>
 
 <main class="landing" data-landing>
   <% if notice.present? || alert.present? %><div class="flash-message <%= alert.present? ? "error" : "success" %>" role="status"><%= alert || notice %></div><% end %>
@@ -13,6 +25,7 @@
       <div class="launch-actions landing-actions">
         <button type="button" class="primary" data-open-dialog="new-game-dialog">New game</button>
         <button type="button" class="secondary" data-open-dialog="load-game-dialog">Load game</button>
+        <button type="button" class="secondary" data-open-dialog="ship-catalog-dialog">View ships</button>
       </div>
     </div>
   </section>
@@ -132,6 +145,118 @@
       <% else %>
         <p class="archive-empty">No local battles are waiting to be resumed.</p>
       <% end %>
+    </div>
+  </dialog>
+
+  <dialog id="ship-catalog-dialog" class="game-dialog ship-catalog-dialog" aria-labelledby="ship-catalog-title" data-ship-catalog>
+    <div class="dialog-frame ship-catalog-frame">
+      <button type="button" class="dialog-close" aria-label="Close ship gallery" data-close-dialog>×</button>
+      <header class="dialog-heading ship-catalog-heading">
+        <p class="eyebrow">Fleet recognition archive</p>
+        <h2 id="ship-catalog-title">Ships of the Reach</h2>
+        <p>Select a vessel to inspect its tactical profile, weapons, and combat systems.</p>
+      </header>
+
+      <div class="ship-catalog-layout">
+        <nav class="ship-catalog-list" aria-label="Ship classes" role="tablist" aria-orientation="vertical">
+          <% ShatteredReach::GameDefinition::FLEETS.each do |fleet_key, fleet| %>
+            <section class="catalog-fleet-group fleet-<%= fleet_key %>">
+              <h3><%= fleet[:name] %></h3>
+              <% ShatteredReach::GameDefinition::SHIPS.select { |_key, ship| ship[:fleet] == fleet_key }.each do |key, ship| %>
+                <button type="button"
+                        class="catalog-ship-choice<%= " selected" if key == "aurelian_frigate" %>"
+                        id="catalog-tab-<%= key %>"
+                        role="tab"
+                        aria-selected="<%= key == "aurelian_frigate" %>"
+                        aria-controls="catalog-panel-<%= key %>"
+                        tabindex="<%= key == "aurelian_frigate" ? 0 : -1 %>"
+                        data-catalog-ship="<%= key %>">
+                  <%= image_tag "ships/tactical/#{key}.png", alt: "", aria: { hidden: true } %>
+                  <span><strong><%= ship[:name].delete_prefix("#{fleet[:name].split.first} ") %></strong><small><%= ship[:size] %> hull</small></span>
+                </button>
+              <% end %>
+            </section>
+          <% end %>
+        </nav>
+
+        <div class="ship-catalog-details">
+          <% ShatteredReach::GameDefinition::SHIPS.each do |key, ship| %>
+            <% fleet = ShatteredReach::GameDefinition::FLEETS.fetch(ship[:fleet]) %>
+            <% grouped_weapons = ship[:weapons].group_by { |weapon| [weapon[:type], weapon[:mount], weapon[:arc], weapon[:ammo]] } %>
+            <% weapon_types = ship[:weapons].map { |weapon| weapon[:type] }.uniq %>
+            <article id="catalog-panel-<%= key %>"
+                     class="catalog-ship-detail fleet-<%= ship[:fleet] %>"
+                     role="tabpanel"
+                     aria-labelledby="catalog-tab-<%= key %>"
+                     tabindex="0"
+                     data-catalog-panel="<%= key %>"
+                     <%= "hidden" unless key == "aurelian_frigate" %>>
+              <header class="catalog-detail-header">
+                <div>
+                  <p class="eyebrow"><%= fleet[:name] %> · <%= ship[:size] %> hull</p>
+                  <h3><%= ship[:name] %></h3>
+                  <p><%= ship_doctrines.fetch(key) %></p>
+                </div>
+                <dl class="catalog-stat-grid">
+                  <div><dt>Hull</dt><dd><%= ship[:hull] %></dd></div>
+                  <div><dt>Energy</dt><dd><%= ship[:energy] %></dd></div>
+                  <div><dt>Forward</dt><dd><%= ship[:front_shields] %></dd></div>
+                  <div><dt>Aft</dt><dd><%= ship[:aft_shields] %></dd></div>
+                </dl>
+              </header>
+
+              <div class="catalog-profile-grid">
+                <figure class="catalog-ship-portrait">
+                  <%= image_tag "ships/tactical/#{key}.png", alt: "Top-down tactical illustration of the #{ship[:name]}" %>
+                  <figcaption><span><%= ship[:size] %> class</span><strong><%= grouped_weapons.values.sum(&:length) %> weapon systems</strong></figcaption>
+                </figure>
+
+                <div class="catalog-systems">
+                  <section class="catalog-turn-mode">
+                    <header><h4>Turn mode</h4><span>Hexes before turning</span></header>
+                    <div><span>Speed</span><b>1–4</b><b>5–8</b><b>9–12</b></div>
+                    <div><span>Hexes</span><% ship_turn_modes.fetch(ship[:size]).each do |value| %><strong><%= value %></strong><% end %></div>
+                  </section>
+
+                  <section class="catalog-loadout">
+                    <header><h4>Weapons manifest</h4><span><%= ship[:weapons].length %> damageable mounts</span></header>
+                    <div>
+                      <% grouped_weapons.each do |(type, mount, arc, ammo), weapons| %>
+                        <% profile = ShatteredReach::GameDefinition::WEAPONS.fetch(type) %>
+                        <article>
+                          <span class="catalog-mount"><i><%= mount %></i></span>
+                          <div><strong><%= profile[:label] %><%= " ×#{weapons.length}" if weapons.length > 1 %></strong><small>Arc <%= arc.join(" · ") %><%= " · #{ammo} missiles each" if ammo %></small></div>
+                          <b><%= type == "missile" ? "MAG" : "#{profile[:energy]}E" %></b>
+                        </article>
+                      <% end %>
+                    </div>
+                  </section>
+                </div>
+              </div>
+
+              <div class="catalog-weapon-matrices">
+                <% weapon_types.each do |type| %>
+                  <% weapon = ShatteredReach::GameDefinition::WEAPONS.fetch(type) %>
+                  <% if type == "missile" %>
+                    <section class="catalog-weapon-chart"><header><h4><%= weapon[:label] %></h4><span>Speed 24 · 2 hexes per impulse</span></header><table><tbody><tr><th>Contact</th><td>Automatic hit</td><th>Damage</th><td><%= weapon[:damage].first %></td></tr></tbody></table></section>
+                  <% else %>
+                    <% boundaries = weapon[:ranges] %>
+                    <% ranges = ["1–#{boundaries[0]}", "#{boundaries[0] + 1}–#{boundaries[1]}", "#{boundaries[1] + 1}–#{boundaries[2]}"] %>
+                    <section class="catalog-weapon-chart">
+                      <header><h4><%= weapon[:label] %></h4><span><%= weapon[:energy] %> energy</span></header>
+                      <table><thead><tr><th></th><th>Short</th><th>Medium</th><th>Long</th></tr></thead><tbody>
+                        <tr><th>Range</th><% ranges.each do |range| %><td><%= range %></td><% end %></tr>
+                        <tr><th>To hit</th><% weapon[:to_hit].each do |hit| %><td><%= hit %>+</td><% end %></tr>
+                        <tr><th>Damage</th><% weapon[:damage].each do |damage| %><td><%= damage %></td><% end %></tr>
+                      </tbody></table>
+                    </section>
+                  <% end %>
+                <% end %>
+              </div>
+            </article>
+          <% end %>
+        </div>
+      </div>
     </div>
   </dialog>
 

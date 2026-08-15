@@ -253,3 +253,94 @@ button:hover, .button:hover { transform: translateY(-1px); border-color: rgba(25
 .impulse-modal-backdrop { position:fixed; inset:0; z-index:40; display:grid; place-items:center; padding:1.5rem; background:rgba(2,4,14,.82); backdrop-filter:blur(10px); }.impulse-modal { width:min(29rem,100%); min-height:34rem; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:2.4rem; border:1px solid rgba(243,191,98,.65); outline:1px solid rgba(243,191,98,.18); outline-offset:.55rem; color:var(--ink); text-align:center; background:radial-gradient(circle at 50% 32%,rgba(243,191,98,.15),transparent 36%),linear-gradient(155deg,#151c3d,#080c20 72%); box-shadow:0 2rem 7rem rgba(0,0,0,.75),inset 0 0 3rem rgba(119,167,255,.07); }.impulse-modal .eyebrow { margin-bottom:1.4rem; }.impulse-modal h2 { margin:0; font:500 2.1rem/1.05 "Unbounded",sans-serif; letter-spacing:-.05em; text-transform:uppercase; }.impulse-modal h2 span { color:var(--gold); font-size:2.75rem; }.impulse-modal-label { margin:2.4rem 0 .8rem; color:var(--quiet); font:.62rem "DM Mono",monospace; letter-spacing:.14em; text-transform:uppercase; }.impulse-speeds { width:100%; display:grid; grid-template-columns:repeat(12,1fr); gap:.45rem; margin-bottom:2.3rem; }.impulse-speeds strong { min-height:4.7rem; display:grid; grid-template-rows:1fr auto; place-items:center; padding:.75rem .25rem .45rem; border:1px solid rgba(243,191,98,.48); color:#fff3d3; background:rgba(243,191,98,.08); font-family:"DM Mono",monospace; box-shadow:inset 0 0 1rem rgba(243,191,98,.06); }.impulse-speeds strong b { align-self:end; font-size:1.15rem; }.impulse-speeds strong small { align-self:end; min-height:.75rem; margin-top:.35rem; color:inherit; font-size:.42rem; font-weight:500; letter-spacing:.04em; text-transform:uppercase; }.impulse-speeds strong.your-speed { color:#091425; border-color:#b8f6ff; background:linear-gradient(145deg,#baf7ff,#68cadb); box-shadow:0 0 1.1rem rgba(105,220,238,.38); }.impulse-speeds strong.opponent-speed { color:#fff4ed; border-color:#f0a276; background:linear-gradient(145deg,rgba(225,141,93,.5),rgba(112,51,35,.62)); box-shadow:0 0 1.1rem rgba(225,141,93,.26); }.impulse-speeds strong.both-speed { color:#fff; border-color:#fff; background:linear-gradient(135deg,#42bed2 0 50%,#b96745 50%); box-shadow:0 0 1.25rem rgba(255,255,255,.24); }.impulse-speeds.speed-count-5 strong,.impulse-speeds.speed-count-6 strong { grid-column:span 4; }.impulse-speeds.speed-count-5 strong:nth-child(4) { grid-column:3/span 4; }.impulse-speeds.speed-count-5 strong:nth-child(5) { grid-column:7/span 4; }.impulse-speeds.speed-count-7 strong,.impulse-speeds.speed-count-8 strong { grid-column:span 3; }.impulse-speeds.speed-count-7 strong:nth-child(5) { grid-column:2/span 3; }.impulse-speeds.speed-count-7 strong:nth-child(6) { grid-column:5/span 3; }.impulse-speeds.speed-count-7 strong:nth-child(7) { grid-column:8/span 3; }.impulse-modal .dismiss-impulse { width:100%; margin-top:auto; }
 .game-confirmation-backdrop { position:fixed; inset:0; z-index:60; display:grid; place-items:center; padding:1.5rem; background:rgba(2,4,14,.84); backdrop-filter:blur(10px); }.game-confirmation { width:min(29rem,100%); padding:2.2rem; border:1px solid rgba(243,191,98,.58); color:var(--ink); background:linear-gradient(155deg,#151c3d,#080c20 72%); box-shadow:0 2rem 7rem rgba(0,0,0,.76); }.game-confirmation h2 { margin:.15rem 0 .7rem; font-size:2.4rem; }.game-confirmation > p:not(.eyebrow) { margin:0; color:var(--quiet); font-size:1.15rem; line-height:1.35; }.game-confirmation-actions { display:grid; grid-template-columns:1fr 1fr; gap:.65rem; margin-top:1.7rem; }.game-confirmation-actions button { width:100%; }.danger { color:#fff; border-color:#ff6578; background:#a82e42; }.danger:hover { border-color:#ff9dab; background:#c83d54; }
 @media (max-width: 1120px) { .schematic-grid { grid-template-columns:1fr 1.45fr; }.schematic-reference { grid-column:1/-1; display:grid; grid-template-columns:repeat(2,1fr); }.reference-label { grid-column:1/-1; }.schematic-vessel { border-right:0; }.header-readout div:nth-child(3),.header-readout div:nth-child(4) { display:none; } }
+
+/* Title-screen fleet recognition archive. */
+.ship-catalog-dialog { width:min(82rem,calc(100vw - 2rem)); overflow:hidden; }
+.ship-catalog-frame { height:min(50rem,calc(100vh - 2rem)); display:flex; flex-direction:column; padding:clamp(1.25rem,2.5vw,2.2rem); }
+.ship-catalog-heading { flex:0 0 auto; margin-bottom:1rem; }
+.ship-catalog-heading h2 { font-size:clamp(2.4rem,4vw,3.6rem); }
+.ship-catalog-heading > p:last-child { margin-bottom:1rem; }
+.ship-catalog-layout { min-height:0; flex:1; display:grid; grid-template-columns:16.5rem minmax(0,1fr); border:1px solid var(--line); background:linear-gradient(145deg,rgba(17,24,52,.82),rgba(5,9,25,.92)); }
+.ship-catalog-list { min-height:0; padding:.8rem; overflow:auto; border-right:1px solid var(--line); background:rgba(3,7,20,.58); scrollbar-width:thin; scrollbar-color:rgba(163,189,255,.3) transparent; }
+.catalog-fleet-group { --catalog-fleet:var(--gold); margin-bottom:1rem; }
+.catalog-fleet-group.fleet-veyr { --catalog-fleet:var(--blue); }
+.catalog-fleet-group.fleet-kestrel { --catalog-fleet:var(--copper); margin-bottom:0; }
+.catalog-fleet-group h3 { margin:0 0 .4rem; color:var(--catalog-fleet); font:500 .52rem "DM Mono",monospace; letter-spacing:.1em; text-transform:uppercase; }
+.catalog-ship-choice { width:100%; min-height:3.6rem; display:grid; grid-template-columns:3.2rem 1fr; align-items:center; gap:.6rem; margin:.25rem 0; padding:.35rem .55rem; color:var(--quiet); border:1px solid transparent; background:transparent; text-align:left; text-transform:none; }
+.catalog-ship-choice:hover { transform:none; color:var(--ink); border-color:color-mix(in srgb,var(--catalog-fleet) 40%,var(--line)); background:color-mix(in srgb,var(--catalog-fleet) 6%,transparent); }
+.catalog-ship-choice:focus-visible { outline:2px solid #fff; outline-offset:-2px; }
+.catalog-ship-choice.selected { color:var(--ink); border-color:color-mix(in srgb,var(--catalog-fleet) 72%,white); background:linear-gradient(100deg,color-mix(in srgb,var(--catalog-fleet) 18%,transparent),transparent); box-shadow:inset 3px 0 var(--catalog-fleet); }
+.catalog-ship-choice img { width:3.1rem; height:3.1rem; object-fit:contain; filter:drop-shadow(0 0 5px color-mix(in srgb,var(--catalog-fleet) 55%,transparent)); }
+.catalog-ship-choice span { min-width:0; display:grid; gap:.08rem; }
+.catalog-ship-choice strong { overflow:hidden; font-size:1rem; line-height:1; text-overflow:ellipsis; white-space:nowrap; }
+.catalog-ship-choice small { color:var(--catalog-fleet); font:.44rem "DM Mono",monospace; letter-spacing:.08em; text-transform:uppercase; }
+.ship-catalog-details { min-height:0; overflow:auto; scrollbar-width:thin; scrollbar-color:rgba(163,189,255,.3) transparent; }
+.catalog-ship-detail { --catalog-fleet:var(--gold); min-height:100%; padding:clamp(1.2rem,2.5vw,2rem); outline:0; background:radial-gradient(circle at 33% 45%,color-mix(in srgb,var(--catalog-fleet) 13%,transparent),transparent 35%); }
+.catalog-ship-detail.fleet-veyr { --catalog-fleet:var(--blue); }
+.catalog-ship-detail.fleet-kestrel { --catalog-fleet:var(--copper); }
+.catalog-detail-header { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:end; gap:1.2rem; padding-bottom:1rem; border-bottom:1px solid color-mix(in srgb,var(--catalog-fleet) 30%,var(--line)); }
+.catalog-detail-header h3 { margin:0; color:var(--ink); font-size:clamp(2rem,4vw,3.4rem); line-height:.92; }
+.catalog-detail-header > div > p:last-child { max-width:38rem; margin:.6rem 0 0; color:var(--quiet); font-size:1.05rem; line-height:1.25; }
+.catalog-detail-header .eyebrow { color:var(--catalog-fleet); }
+.catalog-stat-grid { display:grid; grid-template-columns:repeat(4,4.25rem); margin:0; }
+.catalog-stat-grid div { padding:.25rem .65rem; border-left:1px solid var(--line); }
+.catalog-stat-grid dt { color:var(--quiet); font:.43rem "DM Mono",monospace; letter-spacing:.07em; text-transform:uppercase; }
+.catalog-stat-grid dd { margin:.15rem 0 0; color:var(--catalog-fleet); font:700 1.25rem "DM Mono",monospace; }
+.catalog-profile-grid { display:grid; grid-template-columns:minmax(16rem,.9fr) minmax(20rem,1.1fr); gap:1.2rem; margin-top:1rem; }
+.catalog-ship-portrait { min-height:19rem; position:relative; display:grid; place-items:center; margin:0; overflow:hidden; border:1px solid color-mix(in srgb,var(--catalog-fleet) 32%,var(--line)); background:radial-gradient(circle,color-mix(in srgb,var(--catalog-fleet) 18%,transparent),transparent 55%),rgba(4,8,23,.48); }
+.catalog-ship-portrait:before { content:""; position:absolute; inset:8%; border:1px dashed color-mix(in srgb,var(--catalog-fleet) 22%,transparent); border-radius:50%; }
+.catalog-ship-portrait img { width:90%; height:18rem; position:relative; z-index:1; object-fit:contain; filter:drop-shadow(0 0 13px color-mix(in srgb,var(--catalog-fleet) 55%,transparent)); }
+.catalog-ship-portrait figcaption { position:absolute; left:.75rem; right:.75rem; bottom:.65rem; z-index:2; display:flex; justify-content:space-between; color:var(--quiet); font:.43rem "DM Mono",monospace; letter-spacing:.07em; text-transform:uppercase; }
+.catalog-ship-portrait figcaption strong { color:var(--catalog-fleet); font-weight:500; }
+.catalog-systems { display:flex; flex-direction:column; gap:.8rem; }
+.catalog-turn-mode,.catalog-loadout,.catalog-weapon-chart { border:1px solid var(--line); background:rgba(4,8,23,.56); }
+.catalog-turn-mode header,.catalog-loadout header,.catalog-weapon-chart header { display:flex; align-items:center; justify-content:space-between; gap:.6rem; padding:.55rem .7rem; border-bottom:1px solid var(--line); }
+.catalog-turn-mode h4,.catalog-loadout h4,.catalog-weapon-chart h4 { margin:0; color:var(--ink); font:600 .58rem "DM Mono",monospace; letter-spacing:.08em; text-transform:uppercase; }
+.catalog-turn-mode header span,.catalog-loadout header span,.catalog-weapon-chart header span { color:var(--quiet); font:.43rem "DM Mono",monospace; }
+.catalog-turn-mode > div { display:grid; grid-template-columns:1fr repeat(3,1fr); padding:.42rem .7rem 0; text-align:center; font:.52rem "DM Mono",monospace; }
+.catalog-turn-mode > div:last-child { padding-bottom:.5rem; }
+.catalog-turn-mode > div span { color:var(--quiet); text-align:left; }
+.catalog-turn-mode strong { color:var(--catalog-fleet); }
+.catalog-loadout > div { max-height:12.2rem; overflow:auto; }
+.catalog-loadout article { display:grid; grid-template-columns:2.25rem 1fr auto; align-items:center; gap:.55rem; padding:.45rem .65rem; border-top:1px solid rgba(163,189,255,.12); }
+.catalog-loadout article:first-child { border-top:0; }
+.catalog-mount { width:1.75rem; height:1.75rem; display:grid; place-items:center; color:var(--ink); border:1px solid var(--catalog-fleet); background:color-mix(in srgb,var(--catalog-fleet) 11%,transparent); font:.47rem "DM Mono",monospace; transform:rotate(45deg); }
+.catalog-mount i { font-style:normal; transform:rotate(-45deg); }
+.catalog-loadout article div { display:grid; }
+.catalog-loadout article strong { font-size:.9rem; }
+.catalog-loadout article small { color:var(--quiet); font:.43rem "DM Mono",monospace; }
+.catalog-loadout article > b { color:var(--catalog-fleet); font:.5rem "DM Mono",monospace; }
+.catalog-weapon-matrices { display:grid; grid-template-columns:repeat(auto-fit,minmax(17rem,1fr)); gap:.8rem; margin-top:.8rem; }
+.catalog-weapon-chart table { width:100%; border-collapse:collapse; color:var(--ink); font:.48rem "DM Mono",monospace; text-align:center; }
+.catalog-weapon-chart th,.catalog-weapon-chart td { padding:.37rem .3rem; border:1px solid rgba(163,189,255,.16); }
+.catalog-weapon-chart tr > :first-child { border-left:0; }
+.catalog-weapon-chart tr > :last-child { border-right:0; }
+.catalog-weapon-chart tbody tr:last-child > * { border-bottom:0; }
+.catalog-weapon-chart th { color:var(--quiet); font-weight:400; }
+.catalog-weapon-chart td { color:var(--ink); }
+
+@media (max-width: 850px) {
+  .ship-catalog-layout { grid-template-columns:1fr; overflow:auto; }
+  .ship-catalog-list { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:.5rem; overflow:visible; border-right:0; border-bottom:1px solid var(--line); }
+  .catalog-fleet-group,.catalog-fleet-group.fleet-kestrel { margin:0; }
+  .catalog-ship-choice { grid-template-columns:2.4rem 1fr; }
+  .catalog-ship-choice img { width:2.35rem; height:2.35rem; }
+  .ship-catalog-details { overflow:visible; }
+  .catalog-detail-header { grid-template-columns:1fr; }
+  .catalog-stat-grid { grid-template-columns:repeat(4,1fr); }
+  .catalog-profile-grid { grid-template-columns:1fr; }
+}
+
+@media (max-width: 560px) {
+  .ship-catalog-frame { height:calc(100vh - 1rem); padding:1rem; }
+  .ship-catalog-heading { margin-bottom:.65rem; }
+  .ship-catalog-heading > p:last-child { display:none; }
+  .ship-catalog-list { grid-template-columns:1fr; }
+  .catalog-fleet-group { display:grid; grid-template-columns:repeat(3,1fr); gap:.2rem; }
+  .catalog-fleet-group h3 { grid-column:1/-1; }
+  .catalog-ship-choice { min-height:2.7rem; display:block; padding:.35rem; text-align:center; }
+  .catalog-ship-choice img { display:none; }
+  .catalog-ship-choice strong { font-size:.8rem; }
+  .catalog-stat-grid div { padding:.25rem .4rem; }
+  .catalog-profile-grid { grid-template-columns:minmax(0,1fr); }
+}
