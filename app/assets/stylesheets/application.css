@@ -132,6 +132,11 @@ button:hover, .button:hover { transform: translateY(-1px); border-color: rgba(25
   background:#090a0d;
   box-shadow:inset 3px 0 var(--gold);
 }
+.allocation-readiness { display:flex; justify-content:space-between; padding:.45rem .55rem; border:1px solid rgba(132,199,175,.45); color:var(--quiet); background:rgba(54,126,103,.08); font:.55rem "DM Mono",monospace; }
+.allocation-readiness b { color:#8bd6bc; }
+.commit-fleet:disabled { cursor:not-allowed; opacity:.42; filter:saturate(.35); }
+.commit-fleet:disabled:hover { transform:none; }
+.allocation-committed { border-left-color:#75c6a8; background:rgba(69,159,126,.1); }
 
 .match-layout.phase-allocation.allocation-theme-light .command-panel {
   --ink:#17232b;
@@ -188,6 +193,8 @@ button:hover, .button:hover { transform: translateY(-1px); border-color: rgba(25
   box-shadow:inset 3px 0 #a96309;
 }
 .allocation-theme-light .command-panel .allocation-budget b { color:#8d5003; }
+.allocation-theme-light .command-panel .allocation-readiness { color:#43555d; border-color:rgba(47,104,85,.48); background:rgba(74,134,112,.12); }
+.allocation-theme-light .command-panel .allocation-readiness b { color:#245f4d; }
 .allocation-theme-light .command-panel .control-stack > button.secondary { color:#26353c; border-color:rgba(46,67,76,.42); background:rgba(230,232,224,.3); }
 .allocation-theme-light .command-panel .control-stack > button.secondary:hover { background:rgba(235,237,229,.55); }
 .allocation-theme-light .command-panel .allocation-tip [role="tooltip"] { color:#f4f8f9; border-color:#71909b; background:rgba(21,33,40,.98); }

@@ -316,8 +316,9 @@ export function mountMatch(root) {
     </label>`).join("");
   const commandShipPicker = (current) => {
     const ships = state.ships.filter((ship) => ship.player === player && !ship.destroyed);
-    if (ships.length < 2) return "";
-    return `<nav class="command-ship-picker" aria-label="Choose ship to command">${ships.map((ship) => `<button class="${ship.id === current?.id ? "active" : ""}" data-command-ship-id="${ship.id}"><span>Ship ${ship.fleet_index || 1}</span><b>${ship.name}</b><small>${state.phase === "allocation" ? ship.locked ? `Speed ${ship.allocation.speed} · locked` : ship.allocation_set ? `Speed ${ship.allocation.speed} · saved` : "Not allocated" : `Speed ${ship.allocation.speed}`}</small></button>`).join("")}</nav>`;
+    const selectablePhase = state.phase === "allocation" || ["launch", "fire"].includes(state.activity_step);
+    if (ships.length < 2 || !selectablePhase) return "";
+    return `<nav class="command-ship-picker" aria-label="Choose ship to command">${ships.map((ship) => `<button class="${ship.id === current?.id ? "active" : ""}" data-command-ship-id="${ship.id}"><span>Ship ${ship.fleet_index || 1}</span><b>${ship.name}</b><small>${state.phase === "allocation" ? ship.locked ? "Fleet committed" : ship.allocation_set ? `Plan saved · speed ${ship.allocation.speed}` : "No plan" : `Speed ${ship.allocation.speed}`}</small></button>`).join("")}</nav>`;
   };
   const controls = (ship, target) => {
     const undoMovement = state.movement_undo?.player === player ? `<button class="secondary undo-movement">Undo last movement</button>` : "";
@@ -326,8 +327,11 @@ export function mountMatch(root) {
       const shieldCap = ship.size === "small" ? 1 : ship.size === "medium" ? 2 : 3;
       const frontDamaged = ship.shields.front < ship.max_front_shields;
       const aftDamaged = ship.shields.aft < ship.max_aft_shields;
-      const fleetCount = state.ships.filter((entry) => entry.player === player && !entry.destroyed).length;
-      return `<div class="control-stack"><label>Speed <output id="speed-value">${ship.allocation.speed}</output><input id="speed" type="range" min="0" max="12" value="${ship.allocation.speed}"></label><fieldset class="shield-allocation-list"><legend>Shield reinforcement</legend><label>Forward <output id="front-shields-value">${ship.allocation.shields.front}</output><input id="front-shields" type="range" min="0" max="${ship.shields.front > 0 ? shieldCap : 0}" value="${ship.allocation.shields.front}"></label><label>Aft <output id="aft-shields-value">${ship.allocation.shields.aft}</output><input id="aft-shields" type="range" min="0" max="${ship.shields.aft > 0 ? shieldCap : 0}" value="${ship.allocation.shields.aft}"></label></fieldset><fieldset class="shield-repair-list"><legend>Shield repair · 2 energy</legend><label>Restore at end of turn<select id="shield-repair"><option value="">No repair</option><option value="front" ${ship.allocation.shield_repair === "front" ? "selected" : ""} ${frontDamaged ? "" : "disabled"}>Forward · ${ship.shields.front}/${ship.max_front_shields}</option><option value="aft" ${ship.allocation.shield_repair === "aft" ? "selected" : ""} ${aftDamaged ? "" : "disabled"}>Aft · ${ship.shields.aft}/${ship.max_aft_shields}</option></select></label></fieldset><fieldset class="weapon-allocation-list"><legend>Weapon circuits</legend>${weaponChoices(ship)}</fieldset><div class="allocation-budget"><span>Energy committed</span><b><output id="energy-used">0</output> / ${ship.energy - ship.damage.engines}</b></div><button class="secondary save-allocation allocation-tip" aria-describedby="save-allocation-tip">Save draft<span id="save-allocation-tip" role="tooltip">Store this plan and keep it editable.</span></button><button class="primary commit-allocation allocation-tip" aria-describedby="commit-allocation-tip">${fleetCount > 1 ? "Confirm ship" : "Commit allocation"}<span id="commit-allocation-tip" role="tooltip">${fleetCount > 1 ? "Confirm this ship, then continue to any fleet ships still awaiting orders. The final ship commits the fleet." : `Save this plan and make it final for the turn${state.solo ? "; the AI then commits its own plan" : ""}.`}</span></button></div>`;
+      const fleetShips = state.ships.filter((entry) => entry.player === player && !entry.destroyed);
+      const plansSaved = fleetShips.filter((entry) => entry.allocation_set).length;
+      const fleetReady = plansSaved === fleetShips.length;
+      if (fleetShips.every((entry) => entry.locked)) return `<div class="control-stack"><p class="step-callout allocation-committed"><b>Fleet committed</b>Your plans are locked for this turn. ${state.solo ? "Command AI is completing its allocation." : "Waiting for the opposing fleet."}</p></div>`;
+      return `<div class="control-stack"><label>Speed <output id="speed-value">${ship.allocation.speed}</output><input id="speed" type="range" min="0" max="12" value="${ship.allocation.speed}"></label><fieldset class="shield-allocation-list"><legend>Shield reinforcement</legend><label>Forward <output id="front-shields-value">${ship.allocation.shields.front}</output><input id="front-shields" type="range" min="0" max="${ship.shields.front > 0 ? shieldCap : 0}" value="${ship.allocation.shields.front}"></label><label>Aft <output id="aft-shields-value">${ship.allocation.shields.aft}</output><input id="aft-shields" type="range" min="0" max="${ship.shields.aft > 0 ? shieldCap : 0}" value="${ship.allocation.shields.aft}"></label></fieldset><fieldset class="shield-repair-list"><legend>Shield repair · 2 energy</legend><label>Restore at end of turn<select id="shield-repair"><option value="">No repair</option><option value="front" ${ship.allocation.shield_repair === "front" ? "selected" : ""} ${frontDamaged ? "" : "disabled"}>Forward · ${ship.shields.front}/${ship.max_front_shields}</option><option value="aft" ${ship.allocation.shield_repair === "aft" ? "selected" : ""} ${aftDamaged ? "" : "disabled"}>Aft · ${ship.shields.aft}/${ship.max_aft_shields}</option></select></label></fieldset><fieldset class="weapon-allocation-list"><legend>Weapon circuits</legend>${weaponChoices(ship)}</fieldset><div class="allocation-budget"><span>Energy committed</span><b><output id="energy-used">0</output> / ${ship.energy - ship.damage.engines}</b></div><div class="allocation-readiness"><span>Fleet plans</span><b><span class="plans-saved-count">${plansSaved}</span> / ${fleetShips.length} saved</b></div><button class="secondary save-allocation allocation-tip" aria-describedby="save-allocation-tip">Save Ship Plan<span id="save-allocation-tip" role="tooltip">Save this ship's current plan. You can revise and save it again until the fleet is committed.</span></button><button class="primary commit-fleet allocation-tip" aria-describedby="commit-fleet-tip" ${fleetReady ? "" : "disabled"}>Commit Fleet<span id="commit-fleet-tip" role="tooltip">${fleetReady ? `Lock every saved ship plan for this turn${state.solo ? "; the AI then commits its plans" : ""}.` : "Save a plan for every surviving ship before committing the fleet."}</span></button></div>`;
     }
     if (state.activity_step === "draw") return `<div class="control-stack">${activityStrip()}<p class="step-help">Draw the next card to discover which speeds receive a movement opportunity.</p><button class="primary advance">${state.impulse === 0 ? "Draw first impulse" : state.impulse === 11 ? "Draw the last impulse" : "Draw next impulse"}</button></div>`;
     if (state.activity_step === "movement") {
@@ -360,19 +364,15 @@ export function mountMatch(root) {
       window.location.assign(`/matches/${matchId}`);
     });
     const allocationPayload = () => ({ ship_id: ship.id, speed: root.querySelector("#speed").value, front_shields: root.querySelector("#front-shields").value, aft_shields: root.querySelector("#aft-shields").value, shield_repair: root.querySelector("#shield-repair").value, weapons: [...root.querySelectorAll(".weapon-allocation input:checked")].map((input) => input.value) });
-    const saveCurrentAllocation = async () => {
-      if (state.phase !== "allocation" || !ship || ship.locked) return true;
-      return request("allocate", allocationPayload());
-    };
-    root.querySelector(".switch-player")?.addEventListener("click", async () => {
-      if (state.solo || !await saveCurrentAllocation()) return;
+    root.querySelector(".switch-player")?.addEventListener("click", () => {
+      if (state.solo) return;
       player = player === "player_one" ? "player_two" : "player_one";
       activeShipId = state.ships.find((entry) => entry.player === player && !entry.destroyed)?.id || null;
       selectedWeaponId = null;
       render();
     });
-    root.querySelectorAll("[data-command-ship-id]").forEach((button) => button.addEventListener("click", async () => {
-      if (button.dataset.commandShipId === ship?.id || !await saveCurrentAllocation()) return;
+    root.querySelectorAll("[data-command-ship-id]").forEach((button) => button.addEventListener("click", () => {
+      if (button.dataset.commandShipId === ship?.id) return;
       activeShipId = button.dataset.commandShipId;
       selectedWeaponId = null;
       render();
@@ -414,16 +414,22 @@ export function mountMatch(root) {
       const output = root.querySelector("#energy-used");
       if (output) output.textContent = used;
     };
-    root.querySelectorAll('input[type="range"]').forEach((input) => input.addEventListener("input", () => { root.querySelector(`#${input.id}-value`).textContent = input.value; updateEnergyBudget(); }));
-    root.querySelectorAll(".weapon-allocation input").forEach((input) => input.addEventListener("change", updateEnergyBudget));
-    root.querySelector("#shield-repair")?.addEventListener("change", updateEnergyBudget);
+    const markAllocationDirty = () => {
+      const status = root.querySelector(`[data-command-ship-id="${ship?.id}"] small`);
+      if (status) status.textContent = "Unsaved changes";
+      const commit = root.querySelector(".commit-fleet");
+      if (commit) commit.disabled = true;
+    };
+    root.querySelectorAll('input[type="range"]').forEach((input) => input.addEventListener("input", () => { root.querySelector(`#${input.id}-value`).textContent = input.value; updateEnergyBudget(); markAllocationDirty(); }));
+    root.querySelectorAll(".weapon-allocation input").forEach((input) => input.addEventListener("change", () => { updateEnergyBudget(); markAllocationDirty(); }));
+    root.querySelector("#shield-repair")?.addEventListener("change", () => { updateEnergyBudget(); markAllocationDirty(); });
     updateEnergyBudget();
-    root.querySelector(".save-allocation")?.addEventListener("click", () => request("allocate", allocationPayload()));
-    root.querySelector(".commit-allocation")?.addEventListener("click", async () => {
+    root.querySelector(".save-allocation")?.addEventListener("click", async () => {
       if (!await request("allocate", allocationPayload())) return;
       const nextShip = state.ships.find((entry) => entry.player === player && !entry.destroyed && !entry.allocation_set);
-      if (nextShip) { activeShipId = nextShip.id; render(); } else { await request("lock_allocation"); }
+      if (nextShip) { activeShipId = nextShip.id; render(); }
     });
+    root.querySelector(".commit-fleet")?.addEventListener("click", () => request("lock_allocation"));
     root.querySelector(".advance")?.addEventListener("click", () => request("advance_impulse"));
     root.querySelector(".dismiss-impulse")?.addEventListener("click", () => { impulseModalOpen = false; render(); });
     root.querySelectorAll(".move-ship, .movement-choice").forEach((button) => button.addEventListener("click", () => request("move_ship", { ship_id: state.pending_movement[0], maneuver: button.dataset.maneuver })));
@@ -557,11 +563,12 @@ export function mountMatch(root) {
     const identity = state.solo ? `<div class="solo-identity"><span>You command</span><b>${state.ships.filter((ship) => ship.player === player && !ship.destroyed).length} ship fleet</b></div>` : `<button class="switch-player">Viewing: ${player === "player_one" ? "Player One" : "Player Two"}</button>`;
     const activityLabel = { draw: "Awaiting movement card", movement: "Movement phase", launch: "Missile launch phase", fire: "Direct fire phase" }[state.activity_step];
     const commandTitle = state.phase === "allocation" ? "Allocate Energy" : state.activity_step === "draw" && state.impulse === 11 ? "Draw the last impulse" : { draw: "Draw the next impulse", movement: "Choose your maneuver", launch: "Launch missiles", fire: "Resolve weapons fire" }[state.activity_step] || "Command the engagement";
+    const commandIdentity = state.solo ? state.phase === "allocation" || ["launch", "fire"].includes(state.activity_step) ? `Solo command · Active ship ${current?.fleet_index || 1}` : state.activity_step === "movement" ? `Solo command · Movement order ${current?.fleet_index || 1}` : "Solo command · Fleet control" : state.scenario === "tutorial" ? `Tutorial · ${["Set the battle plan", "Reveal allocations", "Choose a maneuver", "Fire your first weapon"][state.tutorial_step] || "Continue the engagement"}` : "Fleet command";
     const commandLog = state.phase === "allocation" ? "" : `<p class="quiet">${state.log.at(-1)}</p>`;
     const allocationThemePicker = state.phase === "allocation" ? `<div class="allocation-theme-picker" role="group" aria-label="Allocation panel theme"><span>Display</span><button data-allocation-theme="light" aria-pressed="${allocationTheme === "light"}">Light</button><button data-allocation-theme="dark" aria-pressed="${allocationTheme === "dark"}">Night</button></div>` : "";
     root.innerHTML = `
       <header class="game-header"><a href="/" class="wordmark">THE <strong>SHATTERED</strong> REACH</a><div class="turn-state"><span>TURN ${state.turn}${state.phase === "impulse" ? ` · IMPULSE ${state.impulse}` : ""}</span><b>${state.winner ? `${state.winner === "player_one" ? "Player One" : "Player Two"} wins` : state.phase === "allocation" ? "Secret allocation" : activityLabel}</b></div><div class="game-header-actions">${identity}<div class="game-menu"><button class="game-menu-toggle" aria-haspopup="menu" aria-expanded="${gameMenuOpen}">Game <span aria-hidden="true">▾</span></button>${gameMenuOpen ? `<div class="game-menu-list" role="menu"><a class="game-menu-item" role="menuitem" href="/matches/${matchId}/download" download>Save</a><button class="game-menu-item reset-game" role="menuitem">Reset</button><button class="game-menu-item exit-game" role="menuitem">Exit</button></div>` : ""}</div></div></header>
-      <main class="match-layout phase-${state.phase} allocation-theme-${allocationTheme} ${fleetStatusCollapsed ? "fleet-status-collapsed" : ""}"><section class="command-panel"><div class="command-panel-heading"><p class="eyebrow">${state.solo ? `Solo command · Active ship ${current?.fleet_index || 1}` : state.scenario === "tutorial" ? `Tutorial · ${["Set the battle plan", "Reveal allocations", "Choose a maneuver", "Fire your first weapon"][state.tutorial_step] || "Continue the engagement"}` : "Fleet command"}</p>${allocationThemePicker}</div><h1 class="${state.phase === "allocation" ? "allocation-title" : ""}">${commandTitle}</h1>${commandLog}${commandShipPicker(current)}${current ? controls(current, target) : ""}</section>
+      <main class="match-layout phase-${state.phase} allocation-theme-${allocationTheme} ${fleetStatusCollapsed ? "fleet-status-collapsed" : ""}"><section class="command-panel"><div class="command-panel-heading"><p class="eyebrow">${commandIdentity}</p>${allocationThemePicker}</div><h1 class="${state.phase === "allocation" ? "allocation-title" : ""}">${commandTitle}</h1>${commandLog}${commandShipPicker(current)}${current ? controls(current, target) : ""}</section>
       <section class="battlefield"><div class="nebula"></div><div class="zoom-controls" aria-label="Battlefield controls"><button class="movement-lines-toggle" aria-label="${movementLinesVisible ? "Hide" : "Show"} movement paths" aria-pressed="${movementLinesVisible}">${movementLinesVisible ? "TRAILS ON" : "TRAILS OFF"}</button><button class="sound-toggle" aria-label="${soundEnabled ? "Mute" : "Enable"} weapon sounds" aria-pressed="${soundEnabled}">${soundEnabled ? "SOUND ON" : "MUTED"}</button><button class="zoom-out" aria-label="Zoom out">−</button><button class="zoom-reset" aria-label="Reset zoom">${Math.round(zoom * 100)}%</button><button class="zoom-in" aria-label="Zoom in">+</button></div><svg viewBox="0 0 ${boardWidth} ${boardHeight}" aria-label="${boardSize} by ${boardSize} tactical flat-top hex battlefield" style="width:${zoom * 100}%;max-width:none">${grid()}${movementLines()}${movementChoices()}${state.ships.map(hex).join("")}${(state.missiles || []).map(missileCounter).join("")}</svg><div class="battlefield-label">Tactical display · ${boardSize} × ${boardSize} · numbered flat-top hex grid</div></section>
       <aside class="fleet-status ${fleetStatusCollapsed ? "collapsed" : ""}"><div class="fleet-status-header"><h2>Fleet status</h2><button class="fleet-status-toggle" aria-expanded="${!fleetStatusCollapsed}" aria-label="${fleetStatusCollapsed ? "Expand" : "Collapse"} fleet status"><span class="fleet-status-toggle-icon" aria-hidden="true">${fleetStatusCollapsed ? "‹" : "›"}</span><span class="fleet-status-toggle-label">Fleet status</span></button></div><div class="fleet-status-content"><p class="fleet-status-hint">Select any ship to inspect public damage. Enemy allocation remains concealed.</p>${state.ships.map(shipCard).join("")}</div></aside></main>${selectedShip ? shipSchematic(selectedShip, state, player, damageReport) : ""}${impulseModal()}${gameConfirmationModal()}<aside id="weapon-hover-hint" class="weapon-hover-hint fleet-${current?.fleet || "aurelian"}" role="tooltip" aria-hidden="true"></aside>`;
     bind(current, target);
