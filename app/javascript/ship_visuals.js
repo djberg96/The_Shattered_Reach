@@ -60,7 +60,7 @@ const HULLS = {
 // Coordinates deliberately place each weapon on a visible part of its hull.
 // Array order matches the weapon order in GameDefinition.
 const HARDPOINTS = {
-  aurelian_frigate: [[-25, 5], [-25, 14], [25, 5], [25, 14], [0, -22]],
+  aurelian_frigate: [[-20, 5], [-20, 14], [20, 5], [20, 14], [0, -22]],
   aurelian_cruiser: [[-26, 5], [-26, 14], [26, 5], [26, 14], [0, -22], [0, 7]],
   aurelian_battleship: [[-28, 2], [-28, 12], [28, 2], [28, 12], [-8.5, 22], [-8.5, 31], [8.5, 22], [8.5, 31], [0, -22], [0, 7]],
   veyr_frigate: [[0, 10], [0, 19], [22, -9], [-23, -10]],
