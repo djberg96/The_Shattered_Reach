@@ -474,6 +474,7 @@ export function mountMatch(root) {
       event.currentTarget.textContent = arcsVisible ? "Hide firing arcs" : "Show firing arcs";
       event.currentTarget.setAttribute("aria-pressed", String(arcsVisible));
       root.querySelector(".arc-vignette")?.setAttribute("aria-hidden", String(!arcsVisible));
+      root.querySelectorAll(".engineering-shield-bank").forEach((bank) => bank.setAttribute("aria-hidden", String(arcsVisible)));
     });
     const displayWeaponArcs = (weaponControl) => {
       const arcs = weaponControl.dataset.arcs.split(" ");
