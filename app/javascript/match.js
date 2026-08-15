@@ -201,13 +201,35 @@ export function mountMatch(root) {
     const visual = art ? `<image class="ship-art" href="${art}" x="-44" y="-44" width="88" height="88" preserveAspectRatio="xMidYMid meet"/>` : shipHull(ship);
     return `<g class="ship-token fleet-${ship.fleet} ${ship.destroyed ? "destroyed" : ""} ${moving ? "movement-active" : ""} ${target ? `target-candidate ${target}` : selectable ? "selectable" : "ai-opponent"}" data-ship-hover-id="${ship.id}" ${target ? `data-target-id="${ship.id}" role="button" tabindex="0" aria-label="${ship.name}, ${target} target"` : selectable ? `data-ship-id="${ship.id}" role="button" tabindex="0" aria-label="Open ${ship.name} schematic"` : `aria-label="${ship.name}, AI-controlled opponent"`} transform="translate(${x} ${y}) rotate(${120 - (facing * 60)}) scale(.86)"><circle class="ship-target-outline" r="36"/><circle class="ship-hover-area" r="36"/>${visual}</g>`;
   };
+  const missileSplay = (missile) => {
+    const companions = (state.missiles || []).filter((candidate) => candidate.position[0] === missile.position[0] && candidate.position[1] === missile.position[1]);
+    const count = companions.length;
+    if (count <= 1) return { count, index: 0, x: 0, y: 0 };
+
+    const index = companions.findIndex((candidate) => candidate.id === missile.id);
+    const columns = Math.ceil(Math.sqrt(count));
+    const rows = Math.ceil(count / columns);
+    const row = Math.floor(index / columns);
+    const rowStart = row * columns;
+    const rowCount = Math.min(columns, count - rowStart);
+    const column = index - rowStart;
+    const spacing = count === 2 ? 25 : count <= 4 ? 22 : 18;
+    return {
+      count,
+      index,
+      x: (column - ((rowCount - 1) / 2)) * spacing,
+      y: (row - ((rows - 1) / 2)) * spacing
+    };
+  };
   const missileCounter = (missile) => {
     const [q, r, facing] = missile.position; const [x, y] = center(q, r);
+    const splay = missileSplay(missile);
     const target = targetStatus(missile);
     const targetShip = state.ships.find((ship) => ship.id === missile.target_id);
-    const label = `Seeker missile${targetShip ? ` targeting ${targetShip.name}` : ""}`;
-    return `<g class="missile-counter fleet-${missile.fleet} ${target ? `target-candidate ${target}` : ""}" ${target ? `data-target-id="${missile.id}" role="button" tabindex="0" aria-label="${label}, ${target} target"` : `aria-label="${label}"`} transform="translate(${x} ${y}) rotate(${120 - (facing * 60)})">
-      <circle class="missile-target-area" r="24"/><circle class="missile-pulse" r="16"/><path class="missile-wake" d="M-5 10 L0 22 L5 10"/>
+    const groupLabel = splay.count > 1 ? `, missile ${splay.index + 1} of ${splay.count} in this hex` : "";
+    const label = `Seeker missile${targetShip ? ` targeting ${targetShip.name}` : ""}${groupLabel}`;
+    return `<g class="missile-counter fleet-${missile.fleet} ${splay.count > 1 ? "splayed" : ""} ${target ? `target-candidate ${target}` : ""}" ${target ? `data-target-id="${missile.id}" role="button" tabindex="0" aria-label="${label}, ${target} target"` : `aria-label="${label}"`} transform="translate(${x + splay.x} ${y + splay.y}) rotate(${120 - (facing * 60)})">
+      <circle class="missile-target-area" r="${splay.count > 1 ? 15 : 24}"/><circle class="missile-pulse" r="${splay.count > 1 ? 13 : 16}"/><path class="missile-wake" d="M-5 10 L0 22 L5 10"/>
       <path class="missile-body" d="M0 -15 L8 8 L3 6 L0 12 L-3 6 L-8 8 Z"/><text x="0" y="2">M</text>
     </g>`;
   };
