@@ -6,19 +6,55 @@ const FLEETS = {
 
 const HULLS = {
   // Aurelian hulls echo the original Mastafarian split-nacelle silhouettes.
-  aurelian_frigate: "M0 -35L9 -23L9 -10L18 8L27 -17L35 -8L28 5L34 24L17 23L9 10L6 32L-6 32L-9 10L-17 23L-34 24L-28 5L-35 -8L-27 -17L-18 8L-9 -10L-9 -23Z",
-  aurelian_cruiser: "M0 -37L10 -25L10 -11L19 7L29 -20L38 -10L30 6L37 27L18 26L10 12L7 34L-7 34L-10 12L-18 26L-37 27L-30 6L-38 -10L-29 -20L-19 7L-10 -11L-10 -25Z",
-  aurelian_battleship: "M0 -38L12 -27L12 -12L21 5L31 -22L40 -12L32 7L39 29L21 29L15 18L14 36L3 36L3 16L-3 16L-3 36L-14 36L-15 18L-21 29L-39 29L-32 7L-40 -12L-31 -22L-21 5L-12 -12L-12 -27Z",
+  aurelian_frigate: {
+    path: "M0 -37L8 -26L8 -13L15 2L24 -18L33 -9L26 6L31 23L16 22L9 11L5 32L-5 32L-9 11L-16 22L-31 23L-26 6L-33 -9L-24 -18L-15 2L-8 -13L-8 -26Z",
+    detail: "M0 -29V24M-21 9L-10 4M21 9L10 4M-6 21H6",
+    engines: [[0, 28, 3.2]]
+  },
+  aurelian_cruiser: {
+    path: "M0 -40L12 -28L12 -13L20 3L30 -23L40 -12L32 6L38 28L21 29L13 18L11 38L3 38L3 22L-3 22L-3 38L-11 38L-13 18L-21 29L-38 28L-32 6L-40 -12L-30 -23L-20 3L-12 -13L-12 -28Z",
+    detail: "M0 -32V25M-27 8L-13 2M27 8L13 2M-9 19H9M-8 29V35M8 29V35",
+    engines: [[-7, 34, 2.8], [7, 34, 2.8]]
+  },
+  aurelian_battleship: {
+    path: "M0 -43L15 -31L16 -15L23 0L34 -27L44 -15L37 7L43 31L28 35L19 26L18 41L7 41L7 23L3 18L-3 18L-7 23L-7 41L-18 41L-19 26L-28 35L-43 31L-37 7L-44 -15L-34 -27L-23 0L-16 -15L-16 -31Z",
+    detail: "M0 -35V14M-31 7L-18 1M31 7L18 1M-31 26L-21 22M31 26L21 22M-13 20V36M13 20V36M-7 13H7",
+    engines: [[-12, 37, 2.8], [0, 34, 3.6], [12, 37, 2.8]]
+  },
 
   // Veyr hulls inherit the old Mocha broad, armored wing plan.
-  veyr_frigate: "M0 -32L8 -23L14 -10L28 -24L37 -14L31 2L19 9L18 26L9 34L0 27L-9 34L-18 26L-19 9L-31 2L-37 -14L-28 -24L-14 -10L-8 -23Z",
-  veyr_cruiser: "M0 -34L9 -25L15 -10L30 -26L40 -15L33 4L20 10L21 29L10 36L0 28L-10 36L-21 29L-20 10L-33 4L-40 -15L-30 -26L-15 -10L-9 -25Z",
-  veyr_battleship: "M0 -35L10 -26L17 -10L32 -27L41 -16L35 5L22 11L23 30L11 38L0 29L-11 38L-23 30L-22 11L-35 5L-41 -16L-32 -27L-17 -10L-10 -26Z",
+  veyr_frigate: {
+    path: "M0 -36L7 -27L11 -15L23 -24L33 -15L28 -3L18 3L22 17L13 30L4 23L0 34L-4 23L-13 30L-22 17L-18 3L-28 -3L-33 -15L-23 -24L-11 -15L-7 -27Z",
+    detail: "M0 -29V25M-25 -11L-12 1M25 -11L12 1M-10 18H10",
+    engines: [[0, 29, 3.2]]
+  },
+  veyr_cruiser: {
+    path: "M0 -39L10 -30L16 -13L31 -27L41 -16L35 4L23 11L29 28L15 38L0 29L-15 38L-29 28L-23 11L-35 4L-41 -16L-31 -27L-16 -13L-10 -30Z",
+    detail: "M0 -32V27M-32 -13L-16 2M32 -13L16 2M-19 22L-8 17M19 22L8 17M-10 29H10",
+    engines: [[-8, 32, 2.7], [8, 32, 2.7]]
+  },
+  veyr_battleship: {
+    path: "M-16 -40H16L23 -31L38 -27L44 -13L37 2L29 8L39 25L28 38L13 31L0 42L-13 31L-28 38L-39 25L-29 8L-37 2L-44 -13L-38 -27L-23 -31Z",
+    detail: "M0 -35V32M-33 -20L-18 -9M33 -20L18 -9M-29 21L-13 14M29 21L13 14M-13 29H13M-10 -29H10",
+    engines: [[-10, 35, 3], [10, 35, 3]]
+  },
 
   // Kestrel hulls descend from the original Talapian spear-and-pod family.
-  kestrel_frigate: "M0 -38L14 -23L9 -14L9 5L25 14L25 28L11 28L5 16L0 34L-5 16L-11 28L-25 28L-25 14L-9 5L-9 -14L-14 -23Z",
-  kestrel_cruiser: "M0 -39L16 -23L10 -13L10 5L29 14L29 30L12 30L5 16L0 36L-5 16L-12 30L-29 30L-29 14L-10 5L-10 -13L-16 -23Z",
-  kestrel_battleship: "M0 -40L17 -24L11 -12L11 3L22 10L38 8L41 25L33 33L14 31L6 17L0 38L-6 17L-14 31L-33 33L-41 25L-38 8L-22 10L-11 3L-11 -12L-17 -24Z"
+  kestrel_frigate: {
+    path: "M0 -39L10 -28L13 -15L9 -7L10 5L24 13L28 26L18 31L8 26L4 17L0 35L-4 17L-8 26L-18 31L-28 26L-24 13L-10 5L-9 -7L-13 -15L-10 -28Z",
+    detail: "M0 -32V28M-17 17L-7 10M17 17L7 10M-7 -11H7",
+    engines: [[0, 30, 3.2]]
+  },
+  kestrel_cruiser: {
+    path: "M0 -42L13 -30L16 -15L11 -5L12 7L27 12L34 24L28 34L14 33L6 20L0 39L-6 20L-14 33L-28 34L-34 24L-27 12L-12 7L-11 -5L-16 -15L-13 -30Z",
+    detail: "M0 -35V31M-23 20L-9 12M23 20L9 12M-9 -12H9M-10 28L-5 32M10 28L5 32",
+    engines: [[-7, 32, 2.7], [7, 32, 2.7]]
+  },
+  kestrel_battleship: {
+    path: "M0 -44L16 -32L18 -17L13 -6L20 5L37 2L44 15L41 30L29 38L14 34L6 20L0 42L-6 20L-14 34L-29 38L-41 30L-44 15L-37 2L-20 5L-13 -6L-18 -17L-16 -32Z",
+    detail: "M0 -37V34M-34 12L-17 9M34 12L17 9M-31 27L-15 21M31 27L15 21M-11 -13H11M-13 31L-7 35M13 31L7 35",
+    engines: [[-11, 35, 2.8], [0, 38, 3.5], [11, 35, 2.8]]
+  }
 };
 
 // Coordinates deliberately place each weapon on a visible part of its hull.
@@ -29,7 +65,7 @@ const HARDPOINTS = {
   aurelian_battleship: [[-28, 2], [-28, 12], [28, 2], [28, 12], [-8.5, 22], [-8.5, 31], [8.5, 22], [8.5, 31], [0, -22], [0, 7]],
   veyr_frigate: [[0, 10], [0, 19], [22, -9], [-23, -10]],
   veyr_cruiser: [[-12, 10], [-12, 19], [12, 10], [12, 19], [24, -10], [-24, -10]],
-  veyr_battleship: [[-28, -11], [28, -11], [0, 12]],
+  veyr_battleship: [[-18, -21], [18, -21], [0, 10]],
   kestrel_frigate: [[0, -22], [0, -13], [-17, 18], [17, 18]],
   kestrel_cruiser: [[0, -24], [0, -15], [-18, 20], [0, 7], [18, 20]],
   kestrel_battleship: [[0, -25], [0, -16], [-14, 12], [-15, 21], [14, 12], [15, 21], [-31, 20], [0, 1], [31, 20]]
@@ -68,13 +104,9 @@ const WEAPONS = {
 export const fleetName = (fleet) => FLEETS[fleet] || fleet;
 
 export function shipHull(ship) {
-  const path = HULLS[ship.key] || HULLS[`${ship.fleet}_${ship.size}`] || HULLS.aurelian_cruiser;
-  const detail = {
-    aurelian: "M0 -27V24M-19 10L-8 4M19 10L8 4M-7 20H7",
-    veyr: "M0 -25V25M-27 -11L-13 2M27 -11L13 2M-12 19H12",
-    kestrel: "M0 -30V28M-19 13L-8 9M19 13L8 9M-7 -12H7"
-  }[ship.fleet];
-  return `<path class="hull" d="${path}"/><path class="spine" d="${detail}"/><circle class="engine" cy="28" r="3.5"/>`;
+  const hull = HULLS[ship.key] || HULLS[`${ship.fleet}_${ship.size}`] || HULLS.aurelian_cruiser;
+  const engines = hull.engines.map(([cx, cy, radius]) => `<circle class="engine" cx="${cx}" cy="${cy}" r="${radius}"/>`).join("");
+  return `<path class="hull" d="${hull.path}"/><path class="spine" d="${hull.detail}"/>${engines}`;
 }
 
 const weaponState = (weapon, ship, hidden) => {
