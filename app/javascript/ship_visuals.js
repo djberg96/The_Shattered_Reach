@@ -148,7 +148,10 @@ const weaponHardpoints = (ship, hidden, damagedWeaponIds = []) => {
 export function shipGlyph(ship, className = "", options = {}) {
   const hardpoints = options.hardpoints ? weaponHardpoints(ship, options.hidden, options.damagedWeaponIds) : "";
   const accessibility = options.hardpoints ? `role="group" aria-label="${ship.name} weapon hardpoints"` : "aria-hidden=\"true\"";
-  return `<svg class="ship-glyph ${className}" viewBox="-44 -44 88 88" ${accessibility}><g class="ship-token fleet-${ship.fleet}">${shipHull(ship)}</g>${hardpoints}</svg>`;
+  const hull = options.art
+    ? `<image class="engineering-hull-art" href="${options.art}" x="-44" y="-44" width="88" height="88" preserveAspectRatio="xMidYMid meet"/>`
+    : `<g class="ship-token fleet-${ship.fleet}">${shipHull(ship)}</g>`;
+  return `<svg class="ship-glyph ${className} ${options.art ? "art-backed" : ""}" viewBox="-44 -44 88 88" ${accessibility}>${hull}${hardpoints}</svg>`;
 }
 
 const hexPoints = (x, y, size = 45) => Array.from({ length: 6 }, (_, index) => {
@@ -263,7 +266,7 @@ const shipAtDamageSnapshot = (ship, damageEvent) => {
   };
 };
 
-export function shipSchematic(ship, state, player, damageEvent = null) {
+export function shipSchematic(ship, state, player, damageEvent = null, tacticalArt = null) {
   ship = shipAtDamageSnapshot(ship, damageEvent);
   const privateAllocation = state.phase === "allocation" && ship.player !== player;
   const availableEnergy = Math.max(ship.energy - ship.damage.engines, 0);
@@ -302,7 +305,7 @@ export function shipSchematic(ship, state, player, damageEvent = null) {
             <div class="schematic-view-controls"><span>Engineering view</span><button class="toggle-arcs" type="button" aria-pressed="false">Show firing arcs</button></div>
             ${arcHexCluster(ship)}
             <div class="engineering-shield-bank forward" aria-hidden="false">${shieldBank("Forward shield", maxFrontShields, ship.shields.front, shieldColumns, frontShieldDamaged)}</div>
-            ${shipGlyph(ship, `ship-glyph-schematic fleet-${ship.fleet}`, { hardpoints: true, hidden: privateAllocation, damagedWeaponIds })}
+            ${shipGlyph(ship, `ship-glyph-schematic fleet-${ship.fleet}`, { hardpoints: true, hidden: privateAllocation, damagedWeaponIds, art: tacticalArt })}
             <div class="engineering-shield-bank aft" aria-hidden="false">${shieldBank("Aft shield", maxAftShields, ship.shields.aft, shieldColumns, aftShieldDamaged)}</div>
           </div>
           <div class="weapon-rack">${ship.weapons.map((weapon) => weaponModule(weapon, ship, privateAllocation)).join("")}</div>
