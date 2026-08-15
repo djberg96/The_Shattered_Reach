@@ -85,9 +85,10 @@ button:hover, .button:hover { transform: translateY(-1px); border-color: rgba(25
 /* Distinct command surfaces keep the blue-violet battlefield from washing through the whole interface. */
 .command-panel-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:.65rem; }
 .command-panel-heading > .eyebrow { margin-bottom:.5rem; }
-.allocation-theme-picker { flex:0 0 auto; display:flex; align-items:center; border:1px solid currentColor; color:var(--quiet); background:rgba(0,0,0,.08); font:.4rem "DM Mono",monospace; letter-spacing:.07em; text-transform:uppercase; }
-.allocation-theme-picker span { padding:.35rem .42rem; }
-.allocation-theme-picker button { min-width:2.7rem; padding:.35rem .38rem; border:0; border-left:1px solid currentColor; color:inherit; background:transparent; font:inherit; }
+.allocation-theme-picker { flex:0 0 auto; display:flex; align-items:center; color:var(--quiet); font:.4rem "DM Mono",monospace; letter-spacing:.07em; text-transform:uppercase; }
+.allocation-theme-picker span { padding:.35rem .42rem .35rem 0; }
+.allocation-theme-picker button { min-width:2.7rem; padding:.35rem .38rem; border:1px solid currentColor; color:inherit; background:transparent; font:inherit; }
+.allocation-theme-picker button + button { margin-left:.18rem; }
 .allocation-theme-picker button:hover { transform:none; }
 .allocation-theme-picker button[aria-pressed="true"] { color:#111820; background:var(--gold); box-shadow:inset 0 0 0 1px rgba(255,255,255,.3); }
 
@@ -156,7 +157,7 @@ button:hover, .button:hover { transform: translateY(-1px); border-color: rgba(25
 }
 .allocation-theme-light .command-panel .allocation-title { color:#17232b; text-shadow:0 1px rgba(255,255,255,.75); }
 .allocation-theme-light .command-panel .eyebrow { color:#8e5105; }
-.allocation-theme-light .command-panel .allocation-theme-picker { color:#43575f; background:rgba(238,240,232,.24); }
+.allocation-theme-light .command-panel .allocation-theme-picker { color:#43575f; }
 .allocation-theme-light .command-panel .allocation-theme-picker button[aria-pressed="true"] { color:#fff; background:#526871; }
 .allocation-theme-light .command-panel .command-ship-picker button {
   color:#4e6068;
