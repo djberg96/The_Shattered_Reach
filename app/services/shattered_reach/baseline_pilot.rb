@@ -48,7 +48,9 @@ module ShatteredReach
         targets.each do |target|
           range = RulesEngine.distance(ship["position"], target["position"])
           weapon = weapons.find do |candidate|
-            GameDefinition::WEAPONS.fetch(candidate["type"])[:ranges].any? { |limit| range <= limit } &&
+            profile = GameDefinition::WEAPONS.fetch(candidate["type"])
+            range_limit = target.key?("owner") ? profile[:ranges].first : profile[:ranges].last
+            range <= range_limit &&
               RulesEngine.send(:target_in_arc?, ship, target, candidate["arc"])
           end
           next unless weapon
