@@ -1,6 +1,7 @@
 import { fleetName, shipGlyph, shipHull, shipSchematic, weaponHint } from "ship_visuals";
 
 const csrf = () => document.querySelector("meta[name='csrf-token']")?.content;
+const missileTravelDuration = 2000;
 
 export function mountMatch(root) {
   let state = JSON.parse(root.dataset.matchState);
@@ -23,11 +24,14 @@ export function mountMatch(root) {
   let audioContext = null;
   let combatEffectPlaying = false;
   const combatEffectQueue = [];
+  let pendingMissileMovements = [];
+  const deferredCombatEvents = [];
   let lastCombatEventId = Math.max(0, ...(state.combat_events || []).map((event) => Number(event.id) || 0));
   const directions = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]];
 
   const request = async (action, payload = {}) => {
     ensureAudio();
+    const previousState = state;
     const response = await fetch(`/matches/${matchId}/action`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf(), "Accept": "application/json" },
@@ -37,11 +41,16 @@ export function mountMatch(root) {
     if (!response.ok) { window.alert(result.error); return false; }
     const newCombatEvents = (result.combat_events || []).filter((event) => Number(event.id) > lastCombatEventId);
     if (newCombatEvents.length) lastCombatEventId = Math.max(...newCombatEvents.map((event) => Number(event.id)));
+    pendingMissileMovements = collectMissileMovements(previousState, result, newCombatEvents);
     state = result;
     if (action === "fire") selectedWeaponId = null;
     if (action === "advance_impulse") impulseModalOpen = true;
     render();
-    enqueueCombatEffects(newCombatEvents);
+    if (impulseModalOpen && pendingMissileMovements.length) {
+      deferredCombatEvents.push(...newCombatEvents);
+    } else {
+      completeMissileMovement(newCombatEvents);
+    }
     return true;
   };
 
@@ -108,11 +117,11 @@ export function mountMatch(root) {
   const playWeaponSound = (event) => {
     const context = ensureAudio(); if (!context) return;
     const now = context.currentTime;
-    const impactDelay = event.weapon_type === "beam" ? .24 : .48;
+    const impactDelay = event.weapon_type === "missile" ? 0 : event.weapon_type === "beam" ? .24 : .48;
     if (event.weapon_type === "beam") {
       tone(context, { start: now, duration: .42, frequency: 1150, endFrequency: 180, type: "sawtooth", volume: .055 });
       tone(context, { start: now, duration: .34, frequency: 1700, endFrequency: 390, type: "sine", volume: .045, delay: .025 });
-    } else {
+    } else if (event.weapon_type === "driver") {
       tone(context, { start: now, duration: .3, frequency: 145, endFrequency: 42, type: "square", volume: .09 });
       noise(context, { start: now, duration: .22, volume: .075, frequency: 520 });
     }
@@ -137,7 +146,7 @@ export function mountMatch(root) {
     const endY = event.hit ? targetY : targetY + ((dx / length) * missOffset * missSide);
     const destroyed = Boolean(event.damage?.destroyed);
     const resultText = destroyed ? "DESTROYED" : event.hit ? `HIT · ${event.roll}` : `MISS · ${event.roll}`;
-    const trajectory = event.weapon_type === "beam"
+    const trajectory = event.weapon_type === "missile" ? "" : event.weapon_type === "beam"
       ? `<line class="weapon-beam-halo" x1="${startX}" y1="${startY}" x2="${endX}" y2="${endY}"/><line class="weapon-beam-core" x1="${startX}" y1="${startY}" x2="${endX}" y2="${endY}"/>`
       : `<line class="driver-trajectory" x1="${startX}" y1="${startY}" x2="${endX}" y2="${endY}"/><circle class="driver-projectile" r="4"><animateMotion dur="520ms" path="M ${startX} ${startY} L ${endX} ${endY}" fill="freeze"/></circle>`;
     const destruction = destroyed ? `<g class="ship-explosion" transform="translate(${targetX} ${targetY})" aria-hidden="true"><circle class="explosion-glare" r="10"/><circle class="explosion-core" r="13"/><circle class="explosion-ring explosion-ring-one" r="15"/><circle class="explosion-ring explosion-ring-two" r="22"/><path class="explosion-rays" d="M0-58V-15M41-41L11-11M58 0H15M41 41L11 11M0 58V15M-41 41L-11 11M-58 0H-15M-41-41L-11-11"/><path class="explosion-debris" d="M-5-8L-27-48M7-5L48-27M8 5L39 47M-6 8L-41 39M-10 0L-55-12M9-1L54 15"/></g>` : "";
@@ -203,8 +212,8 @@ export function mountMatch(root) {
     const visual = art ? `<image class="ship-art" href="${art}" x="-44" y="-44" width="88" height="88" preserveAspectRatio="xMidYMid meet"/>` : shipHull(ship);
     return `<g class="ship-token fleet-${ship.fleet} ${ship.destroyed ? "destroyed" : ""} ${moving ? "movement-active" : ""} ${target ? `target-candidate ${target}` : selectable ? "selectable" : "ai-opponent"}" data-ship-hover-id="${ship.id}" ${target ? `data-target-id="${ship.id}" role="button" tabindex="0" aria-label="${ship.name}, ${target} target"` : selectable ? `data-ship-id="${ship.id}" role="button" tabindex="0" aria-label="Open ${ship.name} schematic"` : `aria-label="${ship.name}, AI-controlled opponent"`} transform="translate(${x} ${y}) rotate(${120 - (facing * 60)}) scale(.86)"><circle class="ship-target-outline" r="36"/><circle class="ship-hover-area" r="36"/>${visual}</g>`;
   };
-  const missileSplay = (missile) => {
-    const companions = (state.missiles || []).filter((candidate) => candidate.position[0] === missile.position[0] && candidate.position[1] === missile.position[1]);
+  const missileSplay = (missile, missiles = state.missiles || []) => {
+    const companions = missiles.filter((candidate) => candidate.position[0] === missile.position[0] && candidate.position[1] === missile.position[1]);
     const count = companions.length;
     if (count <= 1) return { count, index: 0, x: 0, y: 0 };
 
@@ -233,13 +242,69 @@ export function mountMatch(root) {
     const visual = missileArt
       ? `<image class="missile-art" href="${missileArt}" x="-19" y="-19" width="38" height="38" preserveAspectRatio="xMidYMid slice" clip-path="url(#missile-art-clip)"/>`
       : `<path class="missile-wake" d="M-5 10 L0 22 L5 10"/><path class="missile-body" d="M0 -15 L8 8 L3 6 L0 12 L-3 6 L-8 8 Z"/><text x="0" y="2">M</text>`;
-    return `<g class="missile-counter fleet-${missile.fleet} ${missileArt ? "art-backed" : ""} ${splay.count > 1 ? "splayed" : ""} ${target ? `target-candidate ${target}` : ""}" ${target ? `data-target-id="${missile.id}" role="button" tabindex="0" aria-label="${label}, ${target} target"` : `aria-label="${label}"`} transform="translate(${x + splay.x} ${y + splay.y}) rotate(${120 - (facing * 60)})">
+    const arriving = pendingMissileMovements.some((movement) => movement.id === missile.id);
+    return `<g class="missile-counter fleet-${missile.fleet} ${missileArt ? "art-backed" : ""} ${splay.count > 1 ? "splayed" : ""} ${arriving ? "missile-arriving" : ""} ${target ? `target-candidate ${target}` : ""}" data-missile-id="${missile.id}" ${target ? `data-target-id="${missile.id}" role="button" tabindex="0" aria-label="${label}, ${target} target"` : `aria-label="${label}"`} transform="translate(${x + splay.x} ${y + splay.y}) rotate(${120 - (facing * 60)})">
       <circle class="missile-target-area" r="${splay.count > 1 ? 15 : 24}"/><circle class="missile-pulse" r="${splay.count > 1 ? 13 : 16}"/>${visual}
     </g>`;
   };
   const weaponName = (weapon) => weapon.type === "beam" ? "Lance beam" : weapon.type === "driver" ? "Mass driver" : "Seeker missile";
   const weaponEnergy = (weapon) => weapon.type === "beam" ? 2 : weapon.type === "driver" ? 1 : 0;
   const axialDistance = (a, b) => (Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) + Math.abs((a[0] + a[1]) - (b[0] + b[1]))) / 2;
+  const missileTravelPath = (missile, nextState) => {
+    const target = nextState.ships.find((ship) => ship.id === missile.target_id);
+    if (!target) return [missile.position.slice(0, 2)];
+
+    const position = missile.position.slice(0, 2);
+    const path = [position.slice()];
+    for (let step = 0; step < 2; step += 1) {
+      const direction = directions.map((delta, index) => ({ index, distance: axialDistance([position[0] + delta[0], position[1] + delta[1]], target.position) })).sort((left, right) => left.distance - right.distance || left.index - right.index)[0].index;
+      position[0] += directions[direction][0];
+      position[1] += directions[direction][1];
+      path.push(position.slice());
+      if (position[0] === target.position[0] && position[1] === target.position[1]) break;
+    }
+    return path;
+  };
+  const collectMissileMovements = (previousState, nextState, combatEvents) => {
+    const nextMissiles = nextState.missiles || [];
+    const nextById = new Map(nextMissiles.map((missile) => [missile.id, missile]));
+    return (previousState.missiles || []).flatMap((missile) => {
+      const destination = nextById.get(missile.id);
+      const path = missileTravelPath(missile, nextState);
+      const pathEnd = path.at(-1);
+      const moved = destination && (destination.position[0] !== missile.position[0] || destination.position[1] !== missile.position[1]) && pathEnd[0] === destination.position[0] && pathEnd[1] === destination.position[1];
+      const impacted = !destination && combatEvents.some((event) => event.kind === "missile_impact" && event.missile_id === missile.id);
+      if (!moved && !impacted) return [];
+
+      const startSplay = missileSplay(missile, previousState.missiles || []);
+      const endSplay = destination ? missileSplay(destination, nextMissiles) : { x: 0, y: 0 };
+      return [{ id: missile.id, fleet: missile.fleet, path, facing: destination?.position[2] ?? missile.position[2], startSplay, endSplay, impacted }];
+    });
+  };
+  const missileMovementEffects = () => {
+    if (!pendingMissileMovements.length || impulseModalOpen) return "";
+    return `<g class="missile-movement-effects" aria-label="Missiles moving two hexes">${pendingMissileMovements.map((movement) => {
+      const points = movement.path.map((position, index) => {
+        const [x, y] = center(...position);
+        if (index === 0) return [x + movement.startSplay.x, y + movement.startSplay.y];
+        if (index === movement.path.length - 1 && !movement.impacted) return [x + movement.endSplay.x, y + movement.endSplay.y];
+        return [x, y];
+      });
+      const pointList = points.map((point) => point.join(",")).join(" ");
+      const motionPath = points.map((point, index) => `${index ? "L" : "M"} ${point[0]} ${point[1]}`).join(" ");
+      const keyTimes = points.map((_, index) => (index / (points.length - 1)).toFixed(2)).join(";");
+      const visual = missileArt
+        ? `<image class="missile-art" href="${missileArt}" x="-19" y="-19" width="38" height="38" preserveAspectRatio="xMidYMid slice" clip-path="url(#missile-art-clip)"/>`
+        : `<path class="missile-wake" d="M-5 10 L0 22 L5 10"/><path class="missile-body" d="M0 -15 L8 8 L3 6 L0 12 L-3 6 L-8 8 Z"/>`;
+      const waypoints = points.slice(1, -1).map(([x, y]) => `<circle class="missile-travel-waypoint" cx="${x}" cy="${y}" r="5"/>`).join("");
+      return `<g class="missile-flight-effect fleet-${movement.fleet}"><polyline class="missile-travel-trail" points="${pointList}" pathLength="1"/>${waypoints}<g class="missile-flight-token"><animateMotion dur="${missileTravelDuration}ms" path="${motionPath}" keyTimes="${keyTimes}" calcMode="linear" fill="freeze"/><g transform="rotate(${120 - (movement.facing * 60)})"><circle class="missile-flight-halo" r="17"/>${visual}</g></g></g>`;
+    }).join("")}</g>`;
+  };
+  const completeMissileMovement = (combatEvents) => {
+    const delay = pendingMissileMovements.length ? missileTravelDuration : 0;
+    pendingMissileMovements = [];
+    if (combatEvents.length) window.setTimeout(() => enqueueCombatEffects(combatEvents), delay);
+  };
   const targetInArc = (attacker, target, arcs) => {
     const range = axialDistance(attacker.position, target.position);
     const bearing = directions.map((delta, direction) => ({ direction, distance: axialDistance([attacker.position[0] + delta[0], attacker.position[1] + delta[1]], target.position) })).filter((entry) => entry.distance < range).map((entry) => entry.direction);
@@ -460,7 +525,12 @@ export function mountMatch(root) {
     });
     root.querySelector(".commit-fleet")?.addEventListener("click", () => request("lock_allocation"));
     root.querySelector(".advance")?.addEventListener("click", () => request("advance_impulse"));
-    root.querySelector(".dismiss-impulse")?.addEventListener("click", () => { impulseModalOpen = false; render(); });
+    root.querySelector(".dismiss-impulse")?.addEventListener("click", () => {
+      impulseModalOpen = false;
+      render();
+      const combatEvents = deferredCombatEvents.splice(0);
+      completeMissileMovement(combatEvents);
+    });
     root.querySelectorAll(".move-ship, .movement-choice").forEach((button) => button.addEventListener("click", () => request("move_ship", { ship_id: state.pending_movement[0], maneuver: button.dataset.maneuver })));
     root.querySelector(".undo-movement")?.addEventListener("click", () => request("undo_movement"));
     root.querySelectorAll(".movement-choice").forEach((button) => button.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); request("move_ship", { ship_id: state.pending_movement[0], maneuver: button.dataset.maneuver }); } }));
@@ -597,9 +667,9 @@ export function mountMatch(root) {
     const commandLog = state.phase === "allocation" ? "" : `<p class="quiet">${state.log.at(-1)}</p>`;
     const allocationThemePicker = state.phase === "allocation" ? `<div class="allocation-theme-picker" role="group" aria-label="Allocation panel theme"><span>Display</span><button data-allocation-theme="light" aria-pressed="${allocationTheme === "light"}">Light</button><button data-allocation-theme="dark" aria-pressed="${allocationTheme === "dark"}">Dark</button></div>` : "";
     root.innerHTML = `
-      <header class="game-header"><a href="/" class="wordmark">THE <strong>SHATTERED</strong> REACH</a><div class="turn-state"><span>TURN ${state.turn}${state.phase === "impulse" ? ` · IMPULSE ${state.impulse}` : ""}</span><b>${state.winner ? `${state.winner === "player_one" ? "Player One" : "Player Two"} wins` : state.phase === "allocation" ? "Secret allocation" : activityLabel}</b></div><div class="game-header-actions">${identity}<div class="game-menu"><button class="game-menu-toggle" aria-haspopup="menu" aria-expanded="${gameMenuOpen}">Game <span aria-hidden="true">▾</span></button>${gameMenuOpen ? `<div class="game-menu-list" role="menu"><a class="game-menu-item" role="menuitem" href="/matches/${matchId}/download" download>Save</a><button class="game-menu-item reset-game" role="menuitem">Reset</button><button class="game-menu-item exit-game" role="menuitem">Exit</button></div>` : ""}</div></div></header>
+      <header class="game-header"><a href="/" class="wordmark">THE <strong>SHATTERED</strong> REACH</a><div class="turn-state"><div class="header-counter turn-counter"><span>Turn</span><strong>${state.turn}</strong></div><div class="phase-state"><span>Phase</span><b>${state.winner ? `${state.winner === "player_one" ? "Player One" : "Player Two"} wins` : state.phase === "allocation" ? "Secret allocation" : activityLabel}</b></div><div class="header-counter impulse-counter ${state.phase === "impulse" ? "" : "inactive"}"><span>Impulse</span><strong>${state.phase === "impulse" ? state.impulse : "—"}</strong></div></div><div class="game-header-actions">${identity}<div class="game-menu"><button class="game-menu-toggle" aria-haspopup="menu" aria-expanded="${gameMenuOpen}">Game <span aria-hidden="true">▾</span></button>${gameMenuOpen ? `<div class="game-menu-list" role="menu"><a class="game-menu-item" role="menuitem" href="/matches/${matchId}/download" download>Save</a><button class="game-menu-item reset-game" role="menuitem">Reset</button><button class="game-menu-item exit-game" role="menuitem">Exit</button></div>` : ""}</div></div></header>
       <main class="match-layout phase-${state.phase} allocation-theme-${allocationTheme} ${fleetStatusCollapsed ? "fleet-status-collapsed" : ""}"><section class="command-panel"><div class="command-panel-heading"><p class="eyebrow">${commandIdentity}</p>${allocationThemePicker}</div><h1 class="${state.phase === "allocation" ? "allocation-title" : ""}">${commandTitle}</h1>${commandLog}${commandShipPicker(current)}${current ? controls(current, target) : ""}</section>
-      <section class="battlefield"><div class="nebula"></div><div class="zoom-controls" aria-label="Battlefield controls"><button class="movement-lines-toggle" aria-label="${movementLinesVisible ? "Hide" : "Show"} movement paths" aria-pressed="${movementLinesVisible}">${movementLinesVisible ? "TRAILS ON" : "TRAILS OFF"}</button><button class="sound-toggle" aria-label="${soundEnabled ? "Mute" : "Enable"} weapon sounds" aria-pressed="${soundEnabled}">${soundEnabled ? "SOUND ON" : "MUTED"}</button><button class="zoom-out" aria-label="Zoom out">−</button><button class="zoom-reset" aria-label="Reset zoom">${Math.round(zoom * 100)}%</button><button class="zoom-in" aria-label="Zoom in">+</button></div><svg viewBox="0 0 ${boardWidth} ${boardHeight}" aria-label="${boardSize} by ${boardSize} tactical flat-top hex battlefield" style="width:${zoom * 100}%;max-width:none">${tacticalDefs()}${grid()}${movementLines()}${movementChoices()}${state.ships.map(hex).join("")}${(state.missiles || []).map(missileCounter).join("")}</svg><div class="battlefield-label">Tactical display · ${boardSize} × ${boardSize} · numbered flat-top hex grid</div></section>
+      <section class="battlefield"><div class="nebula"></div><div class="zoom-controls" aria-label="Battlefield controls"><button class="movement-lines-toggle" aria-label="${movementLinesVisible ? "Hide" : "Show"} movement paths" aria-pressed="${movementLinesVisible}">${movementLinesVisible ? "TRAILS ON" : "TRAILS OFF"}</button><button class="sound-toggle" aria-label="${soundEnabled ? "Mute" : "Enable"} weapon sounds" aria-pressed="${soundEnabled}">${soundEnabled ? "SOUND ON" : "MUTED"}</button><button class="zoom-out" aria-label="Zoom out">−</button><button class="zoom-reset" aria-label="Reset zoom">${Math.round(zoom * 100)}%</button><button class="zoom-in" aria-label="Zoom in">+</button></div><svg viewBox="0 0 ${boardWidth} ${boardHeight}" aria-label="${boardSize} by ${boardSize} tactical flat-top hex battlefield" style="width:${zoom * 100}%;max-width:none">${tacticalDefs()}${grid()}${movementLines()}${movementChoices()}${state.ships.map(hex).join("")}${missileMovementEffects()}${(state.missiles || []).map(missileCounter).join("")}</svg><div class="battlefield-label">Tactical display · ${boardSize} × ${boardSize} · numbered flat-top hex grid</div></section>
       <aside class="fleet-status ${fleetStatusCollapsed ? "collapsed" : ""}"><div class="fleet-status-header"><h2>Fleet status</h2><button class="fleet-status-toggle" aria-expanded="${!fleetStatusCollapsed}" aria-label="${fleetStatusCollapsed ? "Expand" : "Collapse"} fleet status"><span class="fleet-status-toggle-icon" aria-hidden="true">${fleetStatusCollapsed ? "‹" : "›"}</span><span class="fleet-status-toggle-label">Fleet status</span></button></div><div class="fleet-status-content"><p class="fleet-status-hint">Select any ship to inspect public damage. Enemy allocation remains concealed.</p>${state.ships.map(shipCard).join("")}</div></aside></main>${selectedShip ? shipSchematic(selectedShip, state, player, damageReport, tacticalArt[selectedShip.key]) : ""}${impulseModal()}${gameConfirmationModal()}<aside id="weapon-hover-hint" class="weapon-hover-hint fleet-${current?.fleet || "aurelian"}" role="tooltip" aria-hidden="true"></aside>`;
     bind(current, target);
   };

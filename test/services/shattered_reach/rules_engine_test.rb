@@ -557,6 +557,7 @@ class ShatteredReach::RulesEngineTest < ActiveSupport::TestCase
     assert_match(/hits .* for 3 damage/, result["log"].last)
     event = result["combat_events"].last
     assert_equal "missile_impact", event["kind"]
+    assert_equal "missile-1", event["missile_id"]
     assert_equal target["id"], event["target_id"]
     assert_equal 3, event.dig("damage", "shield_absorbed")
   end

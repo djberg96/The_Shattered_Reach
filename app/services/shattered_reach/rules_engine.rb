@@ -556,6 +556,7 @@ module ShatteredReach
       state["combat_events"] << {
         "id" => event_id,
         "kind" => "missile_impact",
+        "missile_id" => missile["id"],
         "weapon_type" => "missile",
         "weapon_label" => "Seeker missile",
         "attacker_id" => missile["launcher_ship_id"],
