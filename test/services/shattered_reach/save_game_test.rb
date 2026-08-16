@@ -14,6 +14,7 @@ class ShatteredReach::SaveGameTest < ActiveSupport::TestCase
     assert_equal 20, loaded[:state]["board_size"]
     assert loaded[:state]["solo"]
     assert_equal 4, loaded[:state].dig("ships", 0, "allocation", "speed")
+    assert_equal match.state["rng"], loaded[:state]["rng"]
   end
 
   test "duplicate ships in a fleet retain distinct identities through save and load" do

@@ -50,6 +50,15 @@ class MatchesControllerTest < ActionDispatch::IntegrationTest
     assert_equal 20, Match.last.state["board_size"]
   end
 
+  test "new battles receive unique random seeds" do
+    post matches_url, params: { mode: "solo" }
+    first = Match.last.state.slice("seed", "rng")
+    post matches_url, params: { mode: "solo" }
+    second = Match.last.state.slice("seed", "rng")
+
+    assert_not_equal first, second
+  end
+
   test "match page exposes tactical artwork for every ship class" do
     match = Match.create!(title: "Tactical artwork", state: ShatteredReach::RulesEngine.start(solo: true))
 
@@ -111,6 +120,7 @@ class MatchesControllerTest < ActionDispatch::IntegrationTest
     assert_equal 20, reset_state["board_size"]
     assert_equal 1, reset_state["turn"]
     assert_equal "allocation", reset_state["phase"]
+    assert_not_equal state["seed"], reset_state["seed"]
     assert_equal original_fleets, reset_state["ships"].group_by { |ship| ship["player"] }.transform_values { |ships| ships.map { |ship| ship["key"] } }
     assert reset_state["ships"].all? { |ship| ship["hull"] == ship["max_hull"] }
   end

@@ -1,9 +1,14 @@
 # frozen_string_literal: true
 
+require "digest"
+
 module ShatteredReach
   class RulesEngine
     BOARD_SIZES = [12, 15, 20].freeze
     DIRECTIONS = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]].freeze
+    RNG_MASK = 0xffff_ffff
+    RNG_ACCEPTANCE_LIMIT = ((RNG_MASK + 1) / 6) * 6
+    RNG_STREAMS = %w[attack damage setup].freeze
     # A -1 die-roll penalty is equivalent to increasing the required result by 1.
     MISSILE_TARGET_TO_HIT_PENALTY = 1
 
@@ -15,7 +20,7 @@ module ShatteredReach
     }.freeze
     SIZE_VALUES = { "small" => 2, "medium" => 3, "large" => 4 }.freeze
 
-    def self.start(scenario: :skirmish, solo: false, board_size: 15, player_one_ships: nil, player_two_ships: nil, ai_match: "size")
+    def self.start(scenario: :skirmish, solo: false, board_size: 15, player_one_ships: nil, player_two_ships: nil, ai_match: "size", seed: 17)
       board_size = board_size.to_i
       board_size = 15 unless BOARD_SIZES.include?(board_size)
       fleets = if scenario == :tutorial
@@ -37,7 +42,7 @@ module ShatteredReach
       end
       {
         "version" => GameDefinition::VERSION, "scenario" => scenario.to_s, "solo" => solo, "board_size" => board_size, "turn" => 1,
-        "phase" => "allocation", "impulse" => 0, "seed" => 17, "initiative" => nil,
+        "phase" => "allocation", "impulse" => 0, "seed" => seed.to_i & RNG_MASK, "rng" => initial_rng, "initiative" => nil,
         "activity_step" => "allocation", "impulse_card" => nil, "impulse_phase" => nil, "impulse_card_number" => nil,
         "impulse_order" => nil, "pending_movement" => [], "movement_options" => [],
         "ships" => ships, "missiles" => [], "next_missile_id" => 1,
@@ -47,7 +52,7 @@ module ShatteredReach
       }
     end
 
-    def self.restart(state)
+    def self.restart(state, seed: state.fetch("seed", 17))
       current = Marshal.load(Marshal.dump(state))
       normalize!(current)
       fleets = current.fetch("ships").reject { |ship| ship["destroyed"] && ship["key"].blank? }
@@ -58,7 +63,8 @@ module ShatteredReach
         solo: false,
         board_size: current.fetch("board_size", 15),
         player_one_ships: fleets["player_one"],
-        player_two_ships: fleets["player_two"]
+        player_two_ships: fleets["player_two"],
+        seed: seed
       )
       fresh["solo"] = current["solo"] == true
       fresh
@@ -137,6 +143,8 @@ module ShatteredReach
     end
 
     def self.normalize!(state)
+      state["seed"] = state.fetch("seed", 17).to_i & RNG_MASK
+      state["rng"] = normalized_rng(state["rng"])
       unless state.key?("board_size")
         state["board_size"] = 15
         if state["turn"] == 1 && state["phase"] == "allocation" && state["impulse"].to_i.zero?
@@ -246,7 +254,7 @@ module ShatteredReach
       ships_for(state, player).each { |ship| ship["locked"] = true }
       log!(state, "#{player == "player_one" ? "Player One" : "Player Two"} locks allocation.")
       return unless state["ships"].all? { |ship| ship["locked"] || ship["destroyed"] }
-      state["initiative"] = next_roll(state) >= next_roll(state) ? "player_one" : "player_two"
+      state["initiative"] = next_roll(state, stream: "setup") >= next_roll(state, stream: "setup") ? "player_one" : "player_two"
       state["phase"] = "impulse"
       state["activity_step"] = "draw"
       state["impulse_order"] = Array.new(3) { shuffled_card_indices(state) }
@@ -643,7 +651,7 @@ module ShatteredReach
       remaining = amount - absorbed
       if remaining.positive?
         remaining.times do
-          case next_roll(state)
+          case next_roll(state, stream: "damage")
           when 1..3
             target["hull"] -= 1
             result["hull"] += 1
@@ -728,7 +736,7 @@ module ShatteredReach
     def self.shuffled_card_indices(state)
       indices = [0, 1, 2, 3]
       3.downto(1) do |index|
-        swap = (next_roll(state) - 1) % (index + 1)
+        swap = (next_roll(state, stream: "setup") - 1) % (index + 1)
         indices[index], indices[swap] = indices[swap], indices[index]
       end
       indices
@@ -737,8 +745,39 @@ module ShatteredReach
     def self.distance(a, b)
       ((a[0] - b[0]).abs + (a[1] - b[1]).abs + ((a[0] + a[1]) - (b[0] + b[1])).abs) / 2
     end
-    def self.next_roll(state)
-      state["seed"] = (state["seed"].to_i * 1103515245 + 12345) % 2**31; (state["seed"] % 6) + 1
+    def self.initial_rng
+      {
+        "algorithm" => "sha256-counter-v1",
+        "streams" => RNG_STREAMS.index_with { 0 }
+      }
+    end
+    private_class_method :initial_rng
+
+    def self.normalized_rng(rng)
+      defaults = initial_rng
+      streams = rng.is_a?(Hash) && rng["streams"].is_a?(Hash) ? rng["streams"] : {}
+      defaults["streams"].each_key do |stream|
+        defaults["streams"][stream] = streams[stream].to_i.clamp(0, RNG_MASK)
+      end
+      defaults
+    end
+    private_class_method :normalized_rng
+
+    def self.next_roll(state, stream: "attack")
+      raise ArgumentError, "Unknown random stream" unless RNG_STREAMS.include?(stream)
+
+      unless state["rng"].is_a?(Hash) && state.dig("rng", "streams").is_a?(Hash) && state["rng"]["streams"].key?(stream)
+        state["rng"] = normalized_rng(state["rng"])
+      end
+      loop do
+        counter = state.dig("rng", "streams", stream).to_i & RNG_MASK
+        # Hashing seed, stream, and counter gives each subsystem an independent,
+        # reproducible sequence. Rejecting the four values above this boundary
+        # removes the tiny modulo bias that `% 6` would otherwise introduce.
+        value = Digest::SHA256.digest("#{state.fetch("seed", 17)}:#{stream}:#{counter}").unpack1("L>")
+        state["rng"]["streams"][stream] = (counter + 1) & RNG_MASK
+        return (value % 6) + 1 if value < RNG_ACCEPTANCE_LIMIT
+      end
     end
     private_class_method :next_roll
     def self.ships_for(state, player) = state["ships"].select { |ship| ship["player"] == player && !ship["destroyed"] }

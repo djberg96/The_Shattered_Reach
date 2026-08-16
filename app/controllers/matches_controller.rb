@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "securerandom"
+
 class MatchesController < ApplicationController
   rescue_from ShatteredReach::RulesEngine::IllegalAction, with: :illegal_action
 
@@ -17,7 +19,8 @@ class MatchesController < ApplicationController
       board_size: params[:board_size],
       player_one_ships: params[:player_one_ships],
       player_two_ships: params[:player_two_ships],
-      ai_match: params[:ai_match]
+      ai_match: params[:ai_match],
+      seed: new_match_seed
     )
     match = Match.create!(title: scenario == :tutorial ? "First Light Tutorial" : "Shattered Reach Skirmish", state: state)
     redirect_to match
@@ -37,7 +40,7 @@ class MatchesController < ApplicationController
 
   def reset
     match = Match.find(params[:id])
-    match.update!(state: ShatteredReach::RulesEngine.restart(match.game_state))
+    match.update!(state: ShatteredReach::RulesEngine.restart(match.game_state, seed: new_match_seed))
     respond_to do |format|
       format.html { redirect_to match, notice: "Battle reset." }
       format.json { render json: match.game_state }
@@ -63,6 +66,8 @@ class MatchesController < ApplicationController
   end
 
   private
+
+  def new_match_seed = SecureRandom.random_number(1...2**32)
 
   def action_params
     params.slice(:player, :command, :payload).permit(:player, :command, payload: {})

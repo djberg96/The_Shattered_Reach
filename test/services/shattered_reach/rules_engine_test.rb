@@ -86,6 +86,41 @@ class ShatteredReach::RulesEngineTest < ActiveSupport::TestCase
     assert_equal 5, ship["max_aft_shields"]
   end
 
+  test "seeded random streams are deterministic and isolated" do
+    control = ShatteredReach::RulesEngine.start(seed: 12_345)
+    perturbed = ShatteredReach::RulesEngine.start(seed: 12_345)
+    40.times do
+      ShatteredReach::RulesEngine.send(:next_roll, perturbed, stream: "setup")
+      ShatteredReach::RulesEngine.send(:next_roll, perturbed, stream: "damage")
+    end
+
+    expected = 40.times.map { ShatteredReach::RulesEngine.send(:next_roll, control, stream: "attack") }
+    actual = 40.times.map { ShatteredReach::RulesEngine.send(:next_roll, perturbed, stream: "attack") }
+
+    assert_equal expected, actual
+  end
+
+  test "attack rolls are evenly distributed over a large deterministic sample" do
+    state = ShatteredReach::RulesEngine.start(seed: 54_321)
+    counts = 60_000.times.map { ShatteredReach::RulesEngine.send(:next_roll, state, stream: "attack") }.tally
+
+    (1..6).each do |face|
+      assert_in_delta 10_000, counts.fetch(face), 350, "face #{face} should remain near one sixth of all rolls"
+    end
+  end
+
+  test "legacy saves receive independent random streams" do
+    state = ShatteredReach::RulesEngine.start
+    state.delete("rng")
+    state["seed"] = 1_234_567
+
+    ShatteredReach::RulesEngine.normalize!(state)
+
+    assert_equal "sha256-counter-v1", state.dig("rng", "algorithm")
+    assert_equal %w[attack damage setup], state.dig("rng", "streams").keys.sort
+    assert state.dig("rng", "streams").values.all?(&:zero?)
+  end
+
   test "ship movement paths begin at the turn-start hex and record translations" do
     state = ShatteredReach::RulesEngine.start
     ship = state["ships"].first
@@ -323,7 +358,7 @@ class ShatteredReach::RulesEngineTest < ActiveSupport::TestCase
     state["impulse"] = 1
     state["activity_step"] = "fire"
     state["impulse_order"] = Array.new(3) { [0, 1, 2, 3] }
-    state["seed"] = 3
+    force_rng_rolls(state, "attack", [5])
     before_shield = target["shields"]["front"]
 
     result = ShatteredReach::RulesEngine.apply(state, player: "player_one", action: "fire", payload: { "ship_id" => attacker["id"], "target_id" => target["id"], "weapon_id" => attacker["weapons"].first["id"] })
@@ -364,8 +399,6 @@ class ShatteredReach::RulesEngineTest < ActiveSupport::TestCase
     target["position"] = [5, 5, 0]
     target["shields"] = { "front" => 0, "aft" => 5 }
     target["hull"] = 7
-    state["seed"] = 1
-
     damage = ShatteredReach::RulesEngine.send(:apply_damage!, state, target, 1, [7, 5, 3])
 
     assert_equal "front", damage["shield_bank"]
@@ -380,8 +413,6 @@ class ShatteredReach::RulesEngineTest < ActiveSupport::TestCase
     target["position"] = [5, 5, 0]
     target["shields"] = { "front" => 5, "aft" => 5 }
     target["allocation"]["shields"] = { "front" => 0, "aft" => 0 }
-    state["seed"] = 1
-
     first = ShatteredReach::RulesEngine.send(:apply_damage!, state, target, 3, [7, 5, 3])
     second = ShatteredReach::RulesEngine.send(:apply_damage!, state, target, 3, [7, 5, 3])
 
@@ -405,7 +436,8 @@ class ShatteredReach::RulesEngineTest < ActiveSupport::TestCase
     state["impulse"] = 1
     state["activity_step"] = "fire"
     state["impulse_order"] = Array.new(3) { [0, 1, 2, 3] }
-    state["seed"] = 6
+    force_rng_rolls(state, "attack", [6])
+    force_rng_rolls(state, "damage", [1, 4, 6])
 
     result = ShatteredReach::RulesEngine.apply(state, player: attacker["player"], action: "fire", payload: { "ship_id" => attacker["id"], "target_id" => target["id"], "weapon_id" => weapon["id"] })
     damage = result["combat_events"].last["damage"]
@@ -433,7 +465,7 @@ class ShatteredReach::RulesEngineTest < ActiveSupport::TestCase
     state["impulse"] = 1
     state["activity_step"] = "fire"
     state["impulse_order"] = Array.new(3) { [0, 1, 2, 3] }
-    state["seed"] = 3
+    force_rng_rolls(state, "attack", [5])
 
     result = ShatteredReach::RulesEngine.apply(state, player: attacker["player"], action: "fire", payload: { "ship_id" => attacker["id"], "target_id" => target["id"], "weapon_id" => weapon["id"] })
 
@@ -485,7 +517,7 @@ class ShatteredReach::RulesEngineTest < ActiveSupport::TestCase
     state["impulse"] = 1
     state["activity_step"] = "fire"
     state["impulse_order"] = Array.new(3) { [0, 1, 2, 3] }
-    state["seed"] = 4
+    force_rng_rolls(state, "attack", [5])
     state["missiles"] = [{
       "id" => "missile-1", "owner" => "player_two", "fleet" => "kestrel",
       "launcher_ship_id" => state["ships"].last["id"], "target_id" => attacker["id"],
@@ -509,7 +541,7 @@ class ShatteredReach::RulesEngineTest < ActiveSupport::TestCase
     state["impulse"] = 1
     state["activity_step"] = "fire"
     state["impulse_order"] = Array.new(3) { [0, 1, 2, 3] }
-    state["seed"] = 5
+    force_rng_rolls(state, "attack", [3])
     state["missiles"] = [{ "id" => "missile-1", "owner" => "player_two", "fleet" => "kestrel", "target_id" => attacker["id"], "position" => [2, 0, 3] }]
 
     result = ShatteredReach::RulesEngine.apply(state, player: "player_one", action: "fire", payload: { "ship_id" => attacker["id"], "target_id" => "missile-1", "weapon_id" => weapon["id"] })
@@ -635,5 +667,18 @@ class ShatteredReach::RulesEngineTest < ActiveSupport::TestCase
     end
 
     assert_match(/firing arc/, error.message)
+  end
+
+  private
+
+  def force_rng_rolls(state, stream, rolls)
+    stream_state = (1..100_000).find do |candidate|
+      probe = state.deep_dup
+      probe["rng"]["streams"][stream] = candidate
+      rolls == rolls.length.times.map { ShatteredReach::RulesEngine.send(:next_roll, probe, stream: stream) }
+    end
+    raise "Could not find deterministic #{stream} stream for #{rolls.inspect}" unless stream_state
+
+    state["rng"]["streams"][stream] = stream_state
   end
 end
