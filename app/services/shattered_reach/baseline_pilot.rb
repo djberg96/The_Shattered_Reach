@@ -16,7 +16,9 @@ module ShatteredReach
 
       range = RulesEngine.send(:distance, ship["position"], enemy["position"])
       available_energy = [ship["energy"] - ship.dig("damage", "engines").to_i, 0].max
-      speed = [range > 6 ? 4 : 2, available_energy].min
+      desired_speed = [range > 6 ? 4 : 2, available_energy].min
+      minimum_speed, maximum_speed = RulesEngine.speed_bounds(state, ship)
+      speed = desired_speed.clamp(minimum_speed, maximum_speed)
       budget = available_energy - speed
       repair = %w[front aft].select do |bank|
         ship.dig("shields", bank).to_i < ship.fetch("max_#{bank}_shields")
@@ -26,6 +28,10 @@ module ShatteredReach
       else
         repair = nil
       end
+      weapon_repair = if state.dig("rules_options", "weapon_repair") && budget >= 3
+                        ship["weapons"].find { |weapon| weapon["destroyed"] && weapon["type"] != "missile" }&.dig("id")
+                      end
+      budget -= 3 if weapon_repair
       weapons = ship["weapons"].reject { |weapon| weapon["destroyed"] || weapon["type"] == "missile" }.each_with_object([]) do |weapon, selected|
         cost = GameDefinition::WEAPONS.fetch(weapon["type"])[:energy]
         next if cost > budget
@@ -33,7 +39,7 @@ module ShatteredReach
         selected << weapon["id"]
         budget -= cost
       end
-      { "ship_id" => ship["id"], "speed" => speed, "front_shields" => 0, "aft_shields" => 0, "shield_repair" => repair, "weapons" => weapons }
+      { "ship_id" => ship["id"], "speed" => speed, "front_shields" => 0, "aft_shields" => 0, "shield_repair" => repair, "weapon_repair" => weapon_repair, "weapons" => weapons }
     end
 
     def self.combat_action(state, player)

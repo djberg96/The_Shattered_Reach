@@ -3,6 +3,19 @@
 require "test_helper"
 
 class ShatteredReach::BaselinePilotTest < ActiveSupport::TestCase
+  test "allocation honors acceleration limits and uses optional weapon repair" do
+    state = ShatteredReach::RulesEngine.start(rules_options: { acceleration_limits: true, weapon_repair: true })
+    ship = state["ships"].last
+    ship["previous_speed"] = 10
+    ship["weapons"].find { |weapon| weapon["type"] != "missile" }["destroyed"] = true
+    state["turn"] = 2
+
+    allocation = ShatteredReach::BaselinePilot.allocation(state, ship["player"])
+
+    assert_equal 6, allocation["speed"]
+    assert allocation["weapon_repair"]
+  end
+
   test "beam weapons ignore missiles beyond close range" do
     state, attacker, target = combat_state("kestrel_cruiser")
     attacker["position"] = [6, 0, 3]

@@ -111,6 +111,7 @@ export function shipHull(ship) {
 
 const weaponState = (weapon, ship, hidden) => {
   if (weapon.destroyed) return "destroyed";
+  if (weapon.repaired_this_turn) return "repairing";
   if (weapon.fired) return "fired";
   if (hidden) return "hidden";
   return weapon.type === "missile" || ship.allocation.weapons.includes(weapon.id) ? "charged" : "standby";

@@ -212,6 +212,83 @@ class ShatteredReach::RulesEngineTest < ActiveSupport::TestCase
     assert_match(/energy/, error.message)
   end
 
+  test "optional acceleration limits constrain speed changes after turn one" do
+    state = ShatteredReach::RulesEngine.start(rules_options: { acceleration_limits: true })
+    ship = state["ships"].first
+    ship["previous_speed"] = 8
+    state["turn"] = 2
+
+    error = assert_raises(ShatteredReach::RulesEngine::IllegalAction) do
+      ShatteredReach::RulesEngine.apply(state, player: ship["player"], action: "allocate", payload: { "ship_id" => ship["id"], "speed" => 3 })
+    end
+    assert_match(/speed 4–11/, error.message)
+
+    state = ShatteredReach::RulesEngine.apply(state, player: ship["player"], action: "allocate", payload: { "ship_id" => ship["id"], "speed" => 4 })
+    assert_equal 4, state["ships"].first.dig("allocation", "speed")
+  end
+
+  test "acceleration limits remember speed and permit any first-turn setting" do
+    state = ShatteredReach::RulesEngine.start(rules_options: { acceleration_limits: true })
+    ship = state["ships"].first
+    state = ShatteredReach::RulesEngine.apply(state, player: ship["player"], action: "allocate", payload: { "ship_id" => ship["id"], "speed" => 9 })
+
+    ShatteredReach::RulesEngine.send(:finish_turn!, state)
+
+    assert_equal 9, state["ships"].first["previous_speed"]
+    assert_equal 9, state["ships"].first.dig("allocation", "speed")
+    assert_equal [5, 11], ShatteredReach::RulesEngine.speed_bounds(state, state["ships"].first)
+  end
+
+  test "optional weapon repair costs three energy and stays offline for the turn" do
+    state = ShatteredReach::RulesEngine.start(rules_options: { weapon_repair: true })
+    ship = state["ships"].first
+    weapon = ship["weapons"].find { |candidate| candidate["type"] != "missile" }
+    weapon["destroyed"] = true
+
+    state = ShatteredReach::RulesEngine.apply(state, player: ship["player"], action: "allocate", payload: { "ship_id" => ship["id"], "speed" => 8, "weapon_repair" => weapon["id"] })
+    state = ShatteredReach::RulesEngine.apply(state, player: ship["player"], action: "lock_allocation")
+    repaired = state["ships"].first["weapons"].find { |candidate| candidate["id"] == weapon["id"] }
+
+    refute repaired["destroyed"]
+    assert repaired["repaired_this_turn"]
+    refute_includes state["ships"].first.dig("allocation", "weapons"), weapon["id"]
+
+    state["phase"] = "impulse"
+    state["activity_step"] = "fire"
+    state["ships"].first["allocation"]["weapons"] << weapon["id"]
+    error = assert_raises(ShatteredReach::RulesEngine::IllegalAction) do
+      ShatteredReach::RulesEngine.apply(state, player: ship["player"], action: "fire", payload: { "ship_id" => ship["id"], "weapon_id" => weapon["id"], "target_id" => state["ships"].last["id"] })
+    end
+    assert_match(/remains offline/, error.message)
+
+    ShatteredReach::RulesEngine.send(:finish_turn!, state)
+    refute state["ships"].first["weapons"].find { |candidate| candidate["id"] == weapon["id"] }["repaired_this_turn"]
+  end
+
+  test "weapon repair rejects disabled rules, missiles, and excess energy" do
+    state = ShatteredReach::RulesEngine.start
+    ship = state["ships"].first
+    weapon = ship["weapons"].first
+    weapon["destroyed"] = true
+    assert_raises(ShatteredReach::RulesEngine::IllegalAction) do
+      ShatteredReach::RulesEngine.apply(state, player: ship["player"], action: "allocate", payload: { "ship_id" => ship["id"], "weapon_repair" => weapon["id"] })
+    end
+
+    state = ShatteredReach::RulesEngine.start(player_one_ships: ["veyr_frigate"], rules_options: { weapon_repair: true })
+    ship = state["ships"].first
+    missile = ship["weapons"].find { |candidate| candidate["type"] == "missile" }
+    missile["destroyed"] = true
+    assert_raises(ShatteredReach::RulesEngine::IllegalAction) do
+      ShatteredReach::RulesEngine.apply(state, player: ship["player"], action: "allocate", payload: { "ship_id" => ship["id"], "weapon_repair" => missile["id"] })
+    end
+
+    direct = ship["weapons"].find { |candidate| candidate["type"] != "missile" }
+    direct["destroyed"] = true
+    assert_raises(ShatteredReach::RulesEngine::IllegalAction) do
+      ShatteredReach::RulesEngine.apply(state, player: ship["player"], action: "allocate", payload: { "ship_id" => ship["id"], "speed" => ship["energy"], "weapon_repair" => direct["id"] })
+    end
+  end
+
   test "front and aft shield reinforcement are allocated independently" do
     state = ShatteredReach::RulesEngine.start
     ship = state["ships"].first
@@ -687,6 +764,38 @@ class ShatteredReach::RulesEngineTest < ActiveSupport::TestCase
     assert_equal "sideslip", ship.dig("movement", "last_action")
     refute_includes ShatteredReach::RulesEngine.legal_movement_actions(state, ship["id"]), "sideslip_left"
     refute_includes ShatteredReach::RulesEngine.legal_movement_actions(state, ship["id"]), "sideslip_right"
+  end
+
+  test "fast turns rotate and move the ship forward in one maneuver" do
+    state = ShatteredReach::RulesEngine.start(rules_options: { fast_turns: true })
+    ship = state["ships"].first
+    ship["position"] = [5, 0, 0]
+    ship["allocation"]["speed"] = 1
+    ship["movement"]["hexes_since_turn"] = 1
+    state["phase"] = "impulse"
+    state["activity_step"] = "movement"
+    state["pending_movement"] = [ship["id"]]
+    state["movement_options"] = ShatteredReach::RulesEngine.legal_movement_actions(state, ship["id"])
+
+    assert_includes state["movement_options"], "turn_left"
+    state = ShatteredReach::RulesEngine.apply(state, player: ship["player"], action: "move_ship", payload: { "ship_id" => ship["id"], "maneuver" => "turn_left" })
+
+    moved = state["ships"].first
+    assert_equal [6, -1, 1], moved["position"]
+    assert_equal 1, moved.dig("movement", "hexes_since_turn")
+    assert_equal "forward", moved.dig("movement", "last_action")
+  end
+
+  test "fast turns cannot enter an occupied hex" do
+    state = ShatteredReach::RulesEngine.start(rules_options: { fast_turns: true })
+    ship, blocker = state["ships"]
+    ship["position"] = [5, 0, 0]
+    ship["allocation"]["speed"] = 1
+    ship["movement"]["hexes_since_turn"] = 1
+    blocker["position"] = [6, -1, 3]
+
+    refute_includes ShatteredReach::RulesEngine.legal_movement_actions(state, ship["id"]), "turn_left"
+    assert_includes ShatteredReach::RulesEngine.legal_movement_actions(state, ship["id"]), "turn_right"
   end
 
   test "direct fire enforces the weapon's firing arc" do

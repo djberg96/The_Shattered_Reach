@@ -53,6 +53,22 @@ class ShatteredReach::SaveGameTest < ActiveSupport::TestCase
     assert_equal "front", loaded.dig("ships", 0, "allocation", "shield_repair")
   end
 
+  test "optional rules and their persistent ship state survive save and load" do
+    state = ShatteredReach::RulesEngine.start(rules_options: { acceleration_limits: true, weapon_repair: true, fast_turns: true })
+    ship = state["ships"].first
+    ship["previous_speed"] = 7
+    weapon = ship["weapons"].first
+    weapon["destroyed"] = true
+    ship["allocation"]["weapon_repair"] = weapon["id"]
+    match = Match.create!(title: "Optional engagement", state: state)
+
+    loaded = ShatteredReach::SaveGame.load(ShatteredReach::SaveGame.dump(match))[:state]
+
+    assert loaded["rules_options"].values.all?
+    assert_equal 7, loaded.dig("ships", 0, "previous_speed")
+    assert_equal weapon["id"], loaded.dig("ships", 0, "allocation", "weapon_repair")
+  end
+
   test "loading rejects malformed and unrecognized files" do
     error = assert_raises(ShatteredReach::SaveGame::InvalidSave) { ShatteredReach::SaveGame.load("not json") }
     assert_match(/valid JSON/, error.message)

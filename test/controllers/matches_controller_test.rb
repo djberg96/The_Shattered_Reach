@@ -12,6 +12,7 @@ class MatchesControllerTest < ActionDispatch::IntegrationTest
     assert_select "button[data-open-dialog='ship-catalog-dialog']", text: "View ships"
     assert_select "dialog#new-game-dialog [data-setup-step='1']"
     assert_select "dialog#new-game-dialog [data-setup-step='2'][hidden]"
+    assert_select "dialog#new-game-dialog .setup-options-menu input[type='checkbox']", count: 3
     assert_select "[data-ai-options][hidden] input", count: 2
     assert_select "dialog#load-game-dialog form.load-game-form"
     ShatteredReach::GameDefinition::SHIPS.each_value do |ship|
@@ -32,6 +33,20 @@ class MatchesControllerTest < ActionDispatch::IntegrationTest
     assert_response :redirect
     assert_equal 6, Match.last.state["ships"].length
     assert_equal 2, Match.last.state["ships"].count { |ship| ship["key"] == "aurelian_frigate" }
+  end
+
+  test "a new battle records selected optional rules" do
+    post matches_url, params: {
+      mode: "hotseat",
+      rules_options: { acceleration_limits: "1", fast_turns: "1" }
+    }
+
+    assert_response :redirect
+    assert_equal({
+      "acceleration_limits" => true,
+      "weapon_repair" => false,
+      "fast_turns" => true
+    }, Match.last.state["rules_options"])
   end
 
   test "a solo skirmish balances the selected fleet by total size" do
@@ -105,7 +120,7 @@ class MatchesControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "a battle can be reset with its original mode map and exact fleets" do
-    state = ShatteredReach::RulesEngine.start(solo: true, board_size: 20, player_one_ships: %w[aurelian_frigate aurelian_cruiser], ai_match: "number")
+    state = ShatteredReach::RulesEngine.start(solo: true, board_size: 20, player_one_ships: %w[aurelian_frigate aurelian_cruiser], ai_match: "number", rules_options: { fast_turns: true })
     match = Match.create!(title: "Reset test", state: state)
     original_fleets = state["ships"].group_by { |ship| ship["player"] }.transform_values { |ships| ships.map { |ship| ship["key"] } }
     match.state["turn"] = 3
@@ -122,6 +137,7 @@ class MatchesControllerTest < ActionDispatch::IntegrationTest
     assert_equal "allocation", reset_state["phase"]
     assert_not_equal state["seed"], reset_state["seed"]
     assert_equal original_fleets, reset_state["ships"].group_by { |ship| ship["player"] }.transform_values { |ships| ships.map { |ship| ship["key"] } }
+    assert reset_state.dig("rules_options", "fast_turns")
     assert reset_state["ships"].all? { |ship| ship["hull"] == ship["max_hull"] }
   end
 

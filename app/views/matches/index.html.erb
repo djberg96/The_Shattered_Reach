@@ -71,6 +71,25 @@
             </div>
           </fieldset>
 
+          <details class="setup-options-menu">
+            <summary><span>Optional rules</span><small>Customize movement and repairs</small></summary>
+            <fieldset class="setup-fieldset optional-rules-grid">
+              <legend>Battle options</legend>
+              <label class="setup-option-toggle">
+                <%= check_box_tag "rules_options[acceleration_limits]", "1", false %>
+                <span><strong>Acceleration limits</strong><small>Speed may change by at most 5, 4, or 3 for small, medium, or large ships after turn one.</small></span>
+              </label>
+              <label class="setup-option-toggle">
+                <%= check_box_tag "rules_options[weapon_repair]", "1", false %>
+                <span><strong>Weapon repair</strong><small>Spend 3 energy to repair one beam or mass driver; it remains offline for that turn.</small></span>
+              </label>
+              <label class="setup-option-toggle">
+                <%= check_box_tag "rules_options[fast_turns]", "1", false %>
+                <span><strong>Fast turns</strong><small>A turn rotates the ship 60° and immediately moves it one hex forward.</small></span>
+              </label>
+            </fieldset>
+          </details>
+
           <footer class="dialog-actions">
             <button type="button" class="primary" data-next-setup>Continue to fleet selection</button>
           </footer>

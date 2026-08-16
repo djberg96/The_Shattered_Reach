@@ -118,6 +118,7 @@ module ShatteredReach
         ship["allocation_set"] = ship["allocation_set"] == true
         ship["destroyed"] = ship["destroyed"] == true || ship["hull"].zero?
         ship["special_available"] = ship["special_available"] == true && spec[:size] != "large"
+        ship["previous_speed"] = ship["previous_speed"].nil? ? nil : ship["previous_speed"].to_i.clamp(0, 12)
         ship["movement"] = {
           "hexes_since_turn" => ship.dig("movement", "hexes_since_turn").to_i.clamp(0, 12),
           "last_action" => %w[forward sideslip turn].include?(ship.dig("movement", "last_action")) ? ship.dig("movement", "last_action") : nil
@@ -125,6 +126,10 @@ module ShatteredReach
         path = Array(ship["movement_path"]).select { |position| valid_coordinate?(position) }.first(13).map(&:dup)
         ship["movement_path"] = path.presence || [ship["position"].first(2)]
         canonicalize_weapons!(ship, spec)
+        repairable_weapon_ids = ship["weapons"].select { |weapon| weapon["destroyed"] && weapon["type"] != "missile" }.map { |weapon| weapon["id"] }
+        allocation["weapon_repair"] = if state.dig("rules_options", "weapon_repair") && repairable_weapon_ids.include?(allocation["weapon_repair"])
+                                         allocation["weapon_repair"]
+                                       end
       end
 
       canonicalize_missiles!(state)
@@ -145,7 +150,8 @@ module ShatteredReach
         weapon = definition.stringify_keys.merge(
           "id" => "w#{index}",
           "destroyed" => saved["destroyed"] == true,
-          "fired" => saved["fired"] == true
+          "fired" => saved["fired"] == true,
+          "repaired_this_turn" => saved["repaired_this_turn"] == true
         )
         weapon["ammo"] = saved.fetch("ammo", definition[:ammo]).to_i.clamp(0, definition[:ammo]) if definition.key?(:ammo)
         weapon

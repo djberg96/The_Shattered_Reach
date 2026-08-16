@@ -20,6 +20,7 @@ class MatchesController < ApplicationController
       player_one_ships: params[:player_one_ships],
       player_two_ships: params[:player_two_ships],
       ai_match: params[:ai_match],
+      rules_options: params[:rules_options]&.permit(*ShatteredReach::RulesEngine::OPTIONAL_RULES)&.to_h || {},
       seed: new_match_seed
     )
     match = Match.create!(title: scenario == :tutorial ? "First Light Tutorial" : "Shattered Reach Skirmish", state: state)

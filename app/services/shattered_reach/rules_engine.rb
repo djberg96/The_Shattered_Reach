@@ -9,6 +9,8 @@ module ShatteredReach
     RNG_MASK = 0xffff_ffff
     RNG_ACCEPTANCE_LIMIT = ((RNG_MASK + 1) / 6) * 6
     RNG_STREAMS = %w[attack damage setup].freeze
+    OPTIONAL_RULES = %w[acceleration_limits weapon_repair fast_turns].freeze
+    SPEED_CHANGE_LIMITS = { "small" => 5, "medium" => 4, "large" => 3 }.freeze
     # A -1 die-roll penalty is equivalent to increasing the required result by 1.
     MISSILE_TARGET_TO_HIT_PENALTY = 1
 
@@ -20,7 +22,7 @@ module ShatteredReach
     }.freeze
     SIZE_VALUES = { "small" => 2, "medium" => 3, "large" => 4 }.freeze
 
-    def self.start(scenario: :skirmish, solo: false, board_size: 15, player_one_ships: nil, player_two_ships: nil, ai_match: "size", seed: 17)
+    def self.start(scenario: :skirmish, solo: false, board_size: 15, player_one_ships: nil, player_two_ships: nil, ai_match: "size", rules_options: {}, seed: 17)
       board_size = board_size.to_i
       board_size = 15 unless BOARD_SIZES.include?(board_size)
       fleets = if scenario == :tutorial
@@ -41,7 +43,7 @@ module ShatteredReach
         end
       end
       {
-        "version" => GameDefinition::VERSION, "scenario" => scenario.to_s, "solo" => solo, "board_size" => board_size, "turn" => 1,
+        "version" => GameDefinition::VERSION, "scenario" => scenario.to_s, "solo" => solo, "board_size" => board_size, "rules_options" => normalized_rules_options(rules_options), "turn" => 1,
         "phase" => "allocation", "impulse" => 0, "seed" => seed.to_i & RNG_MASK, "rng" => initial_rng, "initiative" => nil,
         "activity_step" => "allocation", "impulse_card" => nil, "impulse_phase" => nil, "impulse_card_number" => nil,
         "impulse_order" => nil, "pending_movement" => [], "movement_options" => [], "movement_stage" => nil,
@@ -64,6 +66,7 @@ module ShatteredReach
         board_size: current.fetch("board_size", 15),
         player_one_ships: fleets["player_one"],
         player_two_ships: fleets["player_two"],
+        rules_options: current["rules_options"],
         seed: seed
       )
       fresh["solo"] = current["solo"] == true
@@ -102,6 +105,12 @@ module ShatteredReach
       { "aurelian" => "kestrel", "kestrel" => "veyr", "veyr" => "aurelian" }.fetch(dominant)
     end
     private_class_method :opposing_fleet_for
+
+    def self.normalized_rules_options(options)
+      source = options.respond_to?(:to_h) ? options.to_h.stringify_keys : {}
+      OPTIONAL_RULES.index_with { |name| source[name] == true || source[name].to_s == "1" }
+    end
+    private_class_method :normalized_rules_options
 
     def self.starting_positions(board_size)
       formations = starting_formations(board_size, { "player_one" => 1, "player_two" => 1 })
@@ -146,6 +155,7 @@ module ShatteredReach
     def self.normalize!(state)
       state["seed"] = state.fetch("seed", 17).to_i & RNG_MASK
       state["rng"] = normalized_rng(state["rng"])
+      state["rules_options"] = normalized_rules_options(state["rules_options"])
       unless state.key?("board_size")
         state["board_size"] = 15
         if state["turn"] == 1 && state["phase"] == "allocation" && state["impulse"].to_i.zero?
@@ -177,14 +187,18 @@ module ShatteredReach
         ship["fleet_index"] ||= state["ships"].select { |candidate| candidate["player"] == ship["player"] }.index(ship).to_i + 1
         ship["max_front_shields"] ||= spec[:front_shields]
         ship["max_aft_shields"] ||= spec[:aft_shields]
-        allocation = ship["allocation"] ||= { "speed" => 0, "shields" => {}, "shield_repair" => nil, "weapons" => [] }
+        allocation = ship["allocation"] ||= { "speed" => 0, "shields" => {}, "shield_repair" => nil, "weapon_repair" => nil, "weapons" => [] }
         unless allocation["shields"].is_a?(Hash)
           allocation["shields"] = { "front" => allocation["shields"].to_i, "aft" => 0 }
         end
         allocation["shields"]["front"] ||= 0
         allocation["shields"]["aft"] ||= 0
         allocation["shield_repair"] = nil unless %w[front aft].include?(allocation["shield_repair"])
+        repairable_weapon_ids = ship["weapons"].select { |weapon| weapon["destroyed"] && weapon["type"] != "missile" }.map { |weapon| weapon["id"] }
+        allocation["weapon_repair"] = nil unless state.dig("rules_options", "weapon_repair") && repairable_weapon_ids.include?(allocation["weapon_repair"])
+        ship["previous_speed"] = ship["previous_speed"].nil? ? nil : ship["previous_speed"].to_i.clamp(0, 12)
         ship["allocation_set"] = ship["allocation_set"] == true
+        ship["weapons"].each { |weapon| weapon["repaired_this_turn"] = weapon["repaired_this_turn"] == true }
         ship["movement"] ||= { "hexes_since_turn" => 0, "last_action" => nil }
         ship["movement_path"] = [ship["position"].first(2)] unless ship["movement_path"].is_a?(Array) && ship["movement_path"].any?
       end
@@ -217,9 +231,9 @@ module ShatteredReach
         "id" => "#{player}-#{key}-#{fleet_index}", "key" => key, "player" => player, "name" => spec[:name], "fleet_index" => fleet_index, "fleet" => spec[:fleet],
         "size" => spec[:size], "position" => position, "energy" => spec[:energy], "hull" => spec[:hull], "max_hull" => spec[:hull],
         "shields" => { "front" => spec[:front_shields], "aft" => spec[:aft_shields] }, "max_front_shields" => spec[:front_shields], "max_aft_shields" => spec[:aft_shields],
-        "allocation" => { "speed" => 0, "shields" => { "front" => 0, "aft" => 0 }, "shield_repair" => nil, "weapons" => [] },
+        "allocation" => { "speed" => 0, "shields" => { "front" => 0, "aft" => 0 }, "shield_repair" => nil, "weapon_repair" => nil, "weapons" => [] },
         "allocation_set" => false, "locked" => false, "special_available" => spec[:size] != "large", "weapons" => spec[:weapons].map.with_index { |w, i| w.stringify_keys.merge("id" => "w#{i}", "destroyed" => false, "fired" => false) },
-        "damage" => { "engines" => 0, "weapons" => 0 }, "movement" => { "hexes_since_turn" => 0, "last_action" => nil },
+        "previous_speed" => nil, "damage" => { "engines" => 0, "weapons" => 0 }, "movement" => { "hexes_since_turn" => 0, "last_action" => nil },
         "movement_path" => [position.first(2)], "destroyed" => false
       }
     end
@@ -230,6 +244,12 @@ module ShatteredReach
       ship = owned_ship!(state, player, payload.fetch("ship_id"))
       raise IllegalAction, "Allocation is already locked" if ship["locked"]
       speed = payload.fetch("speed", 0).to_i.clamp(0, 12)
+      if state.dig("rules_options", "acceleration_limits") && state["turn"].to_i > 1 && !ship["previous_speed"].nil?
+        minimum_speed, maximum_speed = speed_bounds(state, ship)
+        unless speed.between?(minimum_speed, maximum_speed)
+          raise IllegalAction, "#{ship["name"]} must choose speed #{minimum_speed}–#{maximum_speed} under acceleration limits"
+        end
+      end
       legacy_shields = payload.fetch("shields", 0)
       front_shields = payload.fetch("front_shields", legacy_shields.is_a?(Hash) ? legacy_shields.fetch("front", 0) : legacy_shields).to_i.clamp(0, shield_cap(ship))
       aft_shields = payload.fetch("aft_shields", legacy_shields.is_a?(Hash) ? legacy_shields.fetch("aft", 0) : 0).to_i.clamp(0, shield_cap(ship))
@@ -240,11 +260,17 @@ module ShatteredReach
       if shield_repair && ship.dig("shields", shield_repair).to_i >= maximum_shields(ship, shield_repair)
         raise IllegalAction, "#{shield_repair.capitalize} shield is already at full strength"
       end
+      weapon_repair = payload["weapon_repair"].presence
+      if weapon_repair
+        raise IllegalAction, "Weapon repair is not enabled for this battle" unless state.dig("rules_options", "weapon_repair")
+        repair_weapon = ship["weapons"].find { |weapon| weapon["id"] == weapon_repair }
+        raise IllegalAction, "Choose a damaged beam or mass driver to repair" unless repair_weapon&.dig("destroyed") && repair_weapon["type"] != "missile"
+      end
       weapons = Array(payload["weapons"]).map(&:to_s).uniq
       selected = ship["weapons"].select { |w| weapons.include?(w["id"]) && !w["destroyed"] }
-      cost = speed + front_shields + aft_shields + (shield_repair ? 2 : 0) + selected.sum { |w| GameDefinition::WEAPONS.fetch(w[:type] || w["type"])[:energy] }
+      cost = speed + front_shields + aft_shields + (shield_repair ? 2 : 0) + (weapon_repair ? 3 : 0) + selected.sum { |w| GameDefinition::WEAPONS.fetch(w[:type] || w["type"])[:energy] }
       raise IllegalAction, "Allocation needs #{cost} energy; ship has #{available_energy(ship)}" if cost > available_energy(ship)
-      ship["allocation"] = { "speed" => speed, "shields" => { "front" => front_shields, "aft" => aft_shields }, "shield_repair" => shield_repair, "weapons" => selected.map { |w| w["id"] } }
+      ship["allocation"] = { "speed" => speed, "shields" => { "front" => front_shields, "aft" => aft_shields }, "shield_repair" => shield_repair, "weapon_repair" => weapon_repair, "weapons" => selected.map { |w| w["id"] } }
       ship["allocation_set"] = true
       log!(state, "#{ship["name"]} has set its allocation.")
     end
@@ -255,7 +281,10 @@ module ShatteredReach
       unallocated = ships_for(state, player).reject { |ship| ship["allocation_set"] }
       raise IllegalAction, "Set an allocation for every ship before committing the fleet" if unallocated.any?
 
-      ships_for(state, player).each { |ship| ship["locked"] = true }
+      ships_for(state, player).each do |ship|
+        repair_weapon!(state, ship)
+        ship["locked"] = true
+      end
       log!(state, "#{player == "player_one" ? "Player One" : "Player Two"} locks allocation.")
       return unless state["ships"].all? { |ship| ship["locked"] || ship["destroyed"] }
       state["initiative"] = next_roll(state, stream: "setup") >= next_roll(state, stream: "setup") ? "player_one" : "player_two"
@@ -266,6 +295,21 @@ module ShatteredReach
       log!(state, "Initiative: #{label(state["initiative"])}. Draw the first impulse.")
     end
     private_class_method :lock_allocation!
+
+    def self.repair_weapon!(state, ship)
+      weapon_id = ship.dig("allocation", "weapon_repair")
+      return unless weapon_id
+
+      weapon = ship["weapons"].find { |candidate| candidate["id"] == weapon_id && candidate["destroyed"] && candidate["type"] != "missile" }
+      return unless weapon
+
+      weapon["destroyed"] = false
+      weapon["repaired_this_turn"] = true
+      weapon["fired"] = false
+      ship["allocation"]["weapons"].delete(weapon_id)
+      log!(state, "#{ship["name"]} repairs its #{weapon["mount"] || GameDefinition::WEAPONS.fetch(weapon["type"])[:label]} weapon; it remains offline this turn.")
+    end
+    private_class_method :repair_weapon!
 
     def self.draw_impulse!(state)
       require_phase!(state, "impulse")
@@ -313,11 +357,19 @@ module ShatteredReach
       when "turn_left"
         ship["position"][2] = (ship["position"][2] + 1) % 6
         ship["movement"] = { "hexes_since_turn" => 0, "last_action" => "turn" }
-        log!(state, "#{ship["name"]} turns sixty degrees to port.")
+        if state.dig("rules_options", "fast_turns")
+          translate_ship!(state, ship, ship["position"][2], "turns sixty degrees to port and moves forward")
+        else
+          log!(state, "#{ship["name"]} turns sixty degrees to port.")
+        end
       when "turn_right"
         ship["position"][2] = (ship["position"][2] - 1) % 6
         ship["movement"] = { "hexes_since_turn" => 0, "last_action" => "turn" }
-        log!(state, "#{ship["name"]} turns sixty degrees to starboard.")
+        if state.dig("rules_options", "fast_turns")
+          translate_ship!(state, ship, ship["position"][2], "turns sixty degrees to starboard and moves forward")
+        else
+          log!(state, "#{ship["name"]} turns sixty degrees to starboard.")
+        end
       when "lose_movement"
         log!(state, "#{ship["name"]} has no legal maneuver and loses its movement.")
       end
@@ -354,7 +406,12 @@ module ShatteredReach
         actions << "sideslip_right" if translation_open?(state, ship, (ship["position"][2] - 1) % 6)
       end
       if ship.dig("movement", "hexes_since_turn").to_i >= turn_mode(ship)
-        actions.concat(%w[turn_left turn_right])
+        if state.dig("rules_options", "fast_turns")
+          actions << "turn_left" if translation_open?(state, ship, (ship["position"][2] + 1) % 6)
+          actions << "turn_right" if translation_open?(state, ship, (ship["position"][2] - 1) % 6)
+        else
+          actions.concat(%w[turn_left turn_right])
+        end
       end
       actions.empty? ? ["lose_movement"] : actions
     end
@@ -366,6 +423,16 @@ module ShatteredReach
                    else 2
                    end
       { "small" => 0, "medium" => 1, "large" => 2 }.fetch(ship["size"]) + speed_band
+    end
+
+    def self.speed_bounds(state, ship)
+      return [0, 12] unless state.dig("rules_options", "acceleration_limits") && state["turn"].to_i > 1 && !ship["previous_speed"].nil?
+
+      limit = SPEED_CHANGE_LIMITS.fetch(ship["size"])
+      available = available_energy(ship)
+      minimum = [ship["previous_speed"].to_i - limit, 0].max
+      maximum = [ship["previous_speed"].to_i + limit, 12, available].min
+      [[minimum, available].min, maximum]
     end
 
     def self.translation_open?(state, ship, direction)
@@ -465,6 +532,7 @@ module ShatteredReach
       weapon = attacker["weapons"].find { |entry| entry["id"] == payload.fetch("weapon_id") }
       raise IllegalAction, "Weapon unavailable" unless weapon && !weapon["destroyed"] && !weapon["fired"]
       raise IllegalAction, "Missiles must be launched before direct weapons fire" if weapon["type"] == "missile"
+      raise IllegalAction, "A repaired weapon remains offline for this turn" if weapon["repaired_this_turn"]
       raise IllegalAction, "Weapon was not allocated energy" unless attacker["allocation"]["weapons"].include?(weapon["id"])
 
       range = distance(attacker["position"], target["position"])
@@ -731,15 +799,20 @@ module ShatteredReach
       return if state["winner"]
       state["turn"] += 1; state["phase"] = "allocation"; state["impulse"] = 0
       state["activity_step"] = "allocation"; state["impulse_card"] = nil; state["impulse_phase"] = nil; state["impulse_card_number"] = nil
-      state["impulse_order"] = nil; state["pending_movement"] = []; state["movement_options"] = []
+      state["impulse_order"] = nil; state["pending_movement"] = []; state["movement_options"] = []; state["movement_stage"] = nil
       state["ships"].each do |ship|
         next if ship["destroyed"]
 
         repair_shield!(state, ship)
+        ship["previous_speed"] = ship.dig("allocation", "speed").to_i
         ship["allocation_set"] = false
         ship["locked"] = false
-        ship["allocation"] = { "speed" => 0, "shields" => { "front" => 0, "aft" => 0 }, "shield_repair" => nil, "weapons" => [] }
-        ship["weapons"].each { |weapon| weapon["fired"] = false }
+        next_speed = state.dig("rules_options", "acceleration_limits") ? ship["previous_speed"] : 0
+        ship["allocation"] = { "speed" => next_speed, "shields" => { "front" => 0, "aft" => 0 }, "shield_repair" => nil, "weapon_repair" => nil, "weapons" => [] }
+        ship["weapons"].each do |weapon|
+          weapon["fired"] = false
+          weapon["repaired_this_turn"] = false
+        end
         ship["movement"] = { "hexes_since_turn" => 0, "last_action" => nil }
         ship["movement_path"] = [ship["position"].first(2)]
       end
