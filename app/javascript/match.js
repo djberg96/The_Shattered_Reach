@@ -159,17 +159,29 @@ export function mountMatch(root) {
     const endX = event.hit ? targetX : targetX + ((-dy / length) * missOffset * missSide);
     const endY = event.hit ? targetY : targetY + ((dx / length) * missOffset * missSide);
     const destroyed = Boolean(event.damage?.destroyed);
-    const resultText = destroyed ? "DESTROYED" : event.hit ? `HIT · ${event.roll}` : `MISS · ${event.roll}`;
+    const automaticHit = event.roll === "AUTO";
+    const resultText = destroyed ? "DESTROYED" : event.hit ? "HIT" : "MISS";
+    const rollText = automaticHit ? "AUTO" : event.roll;
+    const targetText = automaticHit ? "AUTOMATIC HIT" : `NEEDED ${event.to_hit}+`;
+    const damageText = !event.hit ? "NO DAMAGE" : event.target_type === "missile" ? "MISSILE DESTROYED" : `${event.damage?.amount || 0} DAMAGE`;
     const trajectory = event.weapon_type === "missile" ? "" : event.weapon_type === "beam"
       ? `<line class="weapon-beam-halo" x1="${startX}" y1="${startY}" x2="${endX}" y2="${endY}"/><line class="weapon-beam-core" x1="${startX}" y1="${startY}" x2="${endX}" y2="${endY}"/>`
       : `<line class="driver-trajectory" x1="${startX}" y1="${startY}" x2="${endX}" y2="${endY}"/><circle class="driver-projectile" r="4"><animateMotion dur="520ms" path="M ${startX} ${startY} L ${endX} ${endY}" fill="freeze"/></circle>`;
     const destruction = destroyed ? `<g class="ship-explosion" transform="translate(${targetX} ${targetY})" aria-hidden="true"><circle class="explosion-glare" r="10"/><circle class="explosion-core" r="13"/><circle class="explosion-ring explosion-ring-one" r="15"/><circle class="explosion-ring explosion-ring-two" r="22"/><path class="explosion-rays" d="M0-58V-15M41-41L11-11M58 0H15M41 41L11 11M0 58V15M-41 41L-11 11M-58 0H-15M-41-41L-11-11"/><path class="explosion-debris" d="M-5-8L-27-48M7-5L48-27M8 5L39 47M-6 8L-41 39M-10 0L-55-12M9-1L54 15"/></g>` : "";
-    return `<g class="combat-effect weapon-${event.weapon_type} result-${event.hit ? "hit" : "miss"} ${destroyed ? "result-destroyed" : ""}" aria-label="${event.weapon_label} ${destroyed ? "destroys" : event.hit ? "hits" : "misses"} ${event.target_name}, roll ${event.roll}">
+    return `<g class="combat-effect weapon-${event.weapon_type} result-${event.hit ? "hit" : "miss"} ${destroyed ? "result-destroyed" : ""}" aria-label="${event.weapon_label} ${destroyed ? "destroys" : event.hit ? "hits" : "misses"} ${event.target_name}, roll ${event.roll}, ${damageText.toLowerCase()}">
       ${trajectory}
       <g class="muzzle-flash" transform="translate(${startX} ${startY})"><circle r="6"/><path d="M-13 0H13M0-13V13M-9-9L9 9M9-9L-9 9"/></g>
       <g class="impact-burst" transform="translate(${targetX} ${targetY})"><circle class="impact-ring" r="8"/><circle class="impact-core" r="5"/><path d="M-20 0H20M0-20V20M-14-14L14 14M14-14L-14 14"/></g>
       ${destruction}
-      <g class="combat-result-marker" transform="translate(${targetX} ${targetY - 31})"><rect x="-31" y="-10" width="62" height="20" rx="2"/><text y="3">${resultText}</text></g>
+      <g class="combat-result-marker" transform="translate(${targetX} ${targetY - 53})">
+        <rect class="combat-result-panel" x="-65" y="-29" width="130" height="58" rx="3"/>
+        <rect class="combat-die-panel" x="-60" y="-24" width="43" height="48" rx="2"/>
+        <text class="combat-die-label" x="-38.5" y="-12">${automaticHit ? "HIT" : "ROLL"}</text>
+        <text class="combat-die-value" x="-38.5" y="12">${rollText}</text>
+        <text class="combat-result-label" x="22" y="-10">${resultText}</text>
+        <text class="combat-target-number" x="22" y="4">${targetText}</text>
+        <text class="combat-damage-value" x="22" y="19">${damageText}</text>
+      </g>
     </g>`;
   };
   const playNextCombatEffect = () => {
@@ -202,7 +214,7 @@ export function mountMatch(root) {
       } else {
         playNextCombatEffect();
       }
-    }, event.damage?.destroyed ? 2850 : 1650);
+    }, 4350);
   };
   const enqueueCombatEffects = (events) => {
     if (events.length) combatResolutionPending = true;
