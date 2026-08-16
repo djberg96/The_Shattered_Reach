@@ -6,4 +6,5 @@
 ].to_h { |key| [key, asset_path("ships/tactical/#{key}.png")] } %>
 <div data-match-id="<%= @match.id %>"
      data-match-state="<%= json_escape(@match.game_state.to_json) %>"
-     data-tactical-art="<%= json_escape(tactical_ship_art.to_json) %>"></div>
+     data-tactical-art="<%= json_escape(tactical_ship_art.to_json) %>"
+     data-missile-art="<%= asset_path("ships/tactical/seeker_missile.png") %>"></div>

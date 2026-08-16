@@ -59,6 +59,7 @@ class MatchesControllerTest < ActionDispatch::IntegrationTest
     manifest = JSON.parse(css_select("[data-tactical-art]").first["data-tactical-art"])
     assert_equal ShatteredReach::GameDefinition::SHIPS.keys.map(&:to_s).sort, manifest.keys.sort
     assert manifest.values.all? { |path| path.include?("/assets/ships/tactical/") }
+    assert_includes css_select("[data-missile-art]").first["data-missile-art"], "/assets/ships/tactical/seeker_missile"
   end
 
   test "game commands are not confused with the Rails action parameter" do

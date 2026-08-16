@@ -6,6 +6,7 @@ export function mountMatch(root) {
   let state = JSON.parse(root.dataset.matchState);
   const matchId = root.dataset.matchId;
   const tacticalArt = JSON.parse(root.dataset.tacticalArt || "{}");
+  const missileArt = root.dataset.missileArt;
   let player = "player_one";
   let activeShipId = state.ships.find((ship) => ship.player === player && !ship.destroyed)?.id || null;
   let zoom = 1;
@@ -182,6 +183,7 @@ export function mountMatch(root) {
     }
     return `<g class="hex-grid">${cells.join("")}</g>`;
   };
+  const tacticalDefs = () => missileArt ? `<defs><clipPath id="missile-art-clip" clipPathUnits="userSpaceOnUse"><ellipse cx="0" cy="0" rx="11" ry="19"/></clipPath></defs>` : "";
   const movementLines = () => {
     if (!movementLinesVisible) return "";
     return `<g class="movement-lines" aria-label="Ship movement paths this turn">${state.ships.map((ship) => {
@@ -228,9 +230,11 @@ export function mountMatch(root) {
     const targetShip = state.ships.find((ship) => ship.id === missile.target_id);
     const groupLabel = splay.count > 1 ? `, missile ${splay.index + 1} of ${splay.count} in this hex` : "";
     const label = `Seeker missile${targetShip ? ` targeting ${targetShip.name}` : ""}${groupLabel}`;
-    return `<g class="missile-counter fleet-${missile.fleet} ${splay.count > 1 ? "splayed" : ""} ${target ? `target-candidate ${target}` : ""}" ${target ? `data-target-id="${missile.id}" role="button" tabindex="0" aria-label="${label}, ${target} target"` : `aria-label="${label}"`} transform="translate(${x + splay.x} ${y + splay.y}) rotate(${120 - (facing * 60)})">
-      <circle class="missile-target-area" r="${splay.count > 1 ? 15 : 24}"/><circle class="missile-pulse" r="${splay.count > 1 ? 13 : 16}"/><path class="missile-wake" d="M-5 10 L0 22 L5 10"/>
-      <path class="missile-body" d="M0 -15 L8 8 L3 6 L0 12 L-3 6 L-8 8 Z"/><text x="0" y="2">M</text>
+    const visual = missileArt
+      ? `<image class="missile-art" href="${missileArt}" x="-19" y="-19" width="38" height="38" preserveAspectRatio="xMidYMid slice" clip-path="url(#missile-art-clip)"/>`
+      : `<path class="missile-wake" d="M-5 10 L0 22 L5 10"/><path class="missile-body" d="M0 -15 L8 8 L3 6 L0 12 L-3 6 L-8 8 Z"/><text x="0" y="2">M</text>`;
+    return `<g class="missile-counter fleet-${missile.fleet} ${missileArt ? "art-backed" : ""} ${splay.count > 1 ? "splayed" : ""} ${target ? `target-candidate ${target}` : ""}" ${target ? `data-target-id="${missile.id}" role="button" tabindex="0" aria-label="${label}, ${target} target"` : `aria-label="${label}"`} transform="translate(${x + splay.x} ${y + splay.y}) rotate(${120 - (facing * 60)})">
+      <circle class="missile-target-area" r="${splay.count > 1 ? 15 : 24}"/><circle class="missile-pulse" r="${splay.count > 1 ? 13 : 16}"/>${visual}
     </g>`;
   };
   const weaponName = (weapon) => weapon.type === "beam" ? "Lance beam" : weapon.type === "driver" ? "Mass driver" : "Seeker missile";
@@ -595,7 +599,7 @@ export function mountMatch(root) {
     root.innerHTML = `
       <header class="game-header"><a href="/" class="wordmark">THE <strong>SHATTERED</strong> REACH</a><div class="turn-state"><span>TURN ${state.turn}${state.phase === "impulse" ? ` · IMPULSE ${state.impulse}` : ""}</span><b>${state.winner ? `${state.winner === "player_one" ? "Player One" : "Player Two"} wins` : state.phase === "allocation" ? "Secret allocation" : activityLabel}</b></div><div class="game-header-actions">${identity}<div class="game-menu"><button class="game-menu-toggle" aria-haspopup="menu" aria-expanded="${gameMenuOpen}">Game <span aria-hidden="true">▾</span></button>${gameMenuOpen ? `<div class="game-menu-list" role="menu"><a class="game-menu-item" role="menuitem" href="/matches/${matchId}/download" download>Save</a><button class="game-menu-item reset-game" role="menuitem">Reset</button><button class="game-menu-item exit-game" role="menuitem">Exit</button></div>` : ""}</div></div></header>
       <main class="match-layout phase-${state.phase} allocation-theme-${allocationTheme} ${fleetStatusCollapsed ? "fleet-status-collapsed" : ""}"><section class="command-panel"><div class="command-panel-heading"><p class="eyebrow">${commandIdentity}</p>${allocationThemePicker}</div><h1 class="${state.phase === "allocation" ? "allocation-title" : ""}">${commandTitle}</h1>${commandLog}${commandShipPicker(current)}${current ? controls(current, target) : ""}</section>
-      <section class="battlefield"><div class="nebula"></div><div class="zoom-controls" aria-label="Battlefield controls"><button class="movement-lines-toggle" aria-label="${movementLinesVisible ? "Hide" : "Show"} movement paths" aria-pressed="${movementLinesVisible}">${movementLinesVisible ? "TRAILS ON" : "TRAILS OFF"}</button><button class="sound-toggle" aria-label="${soundEnabled ? "Mute" : "Enable"} weapon sounds" aria-pressed="${soundEnabled}">${soundEnabled ? "SOUND ON" : "MUTED"}</button><button class="zoom-out" aria-label="Zoom out">−</button><button class="zoom-reset" aria-label="Reset zoom">${Math.round(zoom * 100)}%</button><button class="zoom-in" aria-label="Zoom in">+</button></div><svg viewBox="0 0 ${boardWidth} ${boardHeight}" aria-label="${boardSize} by ${boardSize} tactical flat-top hex battlefield" style="width:${zoom * 100}%;max-width:none">${grid()}${movementLines()}${movementChoices()}${state.ships.map(hex).join("")}${(state.missiles || []).map(missileCounter).join("")}</svg><div class="battlefield-label">Tactical display · ${boardSize} × ${boardSize} · numbered flat-top hex grid</div></section>
+      <section class="battlefield"><div class="nebula"></div><div class="zoom-controls" aria-label="Battlefield controls"><button class="movement-lines-toggle" aria-label="${movementLinesVisible ? "Hide" : "Show"} movement paths" aria-pressed="${movementLinesVisible}">${movementLinesVisible ? "TRAILS ON" : "TRAILS OFF"}</button><button class="sound-toggle" aria-label="${soundEnabled ? "Mute" : "Enable"} weapon sounds" aria-pressed="${soundEnabled}">${soundEnabled ? "SOUND ON" : "MUTED"}</button><button class="zoom-out" aria-label="Zoom out">−</button><button class="zoom-reset" aria-label="Reset zoom">${Math.round(zoom * 100)}%</button><button class="zoom-in" aria-label="Zoom in">+</button></div><svg viewBox="0 0 ${boardWidth} ${boardHeight}" aria-label="${boardSize} by ${boardSize} tactical flat-top hex battlefield" style="width:${zoom * 100}%;max-width:none">${tacticalDefs()}${grid()}${movementLines()}${movementChoices()}${state.ships.map(hex).join("")}${(state.missiles || []).map(missileCounter).join("")}</svg><div class="battlefield-label">Tactical display · ${boardSize} × ${boardSize} · numbered flat-top hex grid</div></section>
       <aside class="fleet-status ${fleetStatusCollapsed ? "collapsed" : ""}"><div class="fleet-status-header"><h2>Fleet status</h2><button class="fleet-status-toggle" aria-expanded="${!fleetStatusCollapsed}" aria-label="${fleetStatusCollapsed ? "Expand" : "Collapse"} fleet status"><span class="fleet-status-toggle-icon" aria-hidden="true">${fleetStatusCollapsed ? "‹" : "›"}</span><span class="fleet-status-toggle-label">Fleet status</span></button></div><div class="fleet-status-content"><p class="fleet-status-hint">Select any ship to inspect public damage. Enemy allocation remains concealed.</p>${state.ships.map(shipCard).join("")}</div></aside></main>${selectedShip ? shipSchematic(selectedShip, state, player, damageReport, tacticalArt[selectedShip.key]) : ""}${impulseModal()}${gameConfirmationModal()}<aside id="weapon-hover-hint" class="weapon-hover-hint fleet-${current?.fleet || "aurelian"}" role="tooltip" aria-hidden="true"></aside>`;
     bind(current, target);
   };
