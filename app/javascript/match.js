@@ -22,7 +22,9 @@ export function mountMatch(root) {
   let gameMenuOpen = false;
   let gameConfirmation = null;
   let audioContext = null;
+  let requestInFlight = false;
   let combatEffectPlaying = false;
+  let combatResolutionPending = false;
   const combatEffectQueue = [];
   let pendingMissileMovements = [];
   const deferredCombatEvents = [];
@@ -30,28 +32,40 @@ export function mountMatch(root) {
   const directions = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]];
 
   const request = async (action, payload = {}) => {
+    if (requestInFlight || combatResolutionPending) return false;
+    requestInFlight = true;
     ensureAudio();
-    const previousState = state;
-    const response = await fetch(`/matches/${matchId}/action`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf(), "Accept": "application/json" },
-      body: JSON.stringify({ player, command: action, payload })
-    });
-    const result = await response.json();
-    if (!response.ok) { window.alert(result.error); return false; }
-    const newCombatEvents = (result.combat_events || []).filter((event) => Number(event.id) > lastCombatEventId);
-    if (newCombatEvents.length) lastCombatEventId = Math.max(...newCombatEvents.map((event) => Number(event.id)));
-    pendingMissileMovements = collectMissileMovements(previousState, result, newCombatEvents);
-    state = result;
-    if (action === "fire") selectedWeaponId = null;
-    if (action === "advance_impulse") impulseModalOpen = true;
-    render();
-    if (impulseModalOpen && pendingMissileMovements.length) {
-      deferredCombatEvents.push(...newCombatEvents);
-    } else {
-      completeMissileMovement(newCombatEvents);
+    try {
+      const previousState = state;
+      const response = await fetch(`/matches/${matchId}/action`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf(), "Accept": "application/json" },
+        body: JSON.stringify({ player, command: action, payload })
+      });
+      const result = await response.json();
+      if (!response.ok) { window.alert(result.error); return false; }
+      const newCombatEvents = (result.combat_events || []).filter((event) => Number(event.id) > lastCombatEventId);
+      if (newCombatEvents.length) {
+        lastCombatEventId = Math.max(...newCombatEvents.map((event) => Number(event.id)));
+        combatResolutionPending = true;
+      }
+      pendingMissileMovements = collectMissileMovements(previousState, result, newCombatEvents);
+      state = result;
+      if (action === "fire") selectedWeaponId = null;
+      if (action === "advance_impulse") impulseModalOpen = true;
+      render();
+      if (impulseModalOpen && pendingMissileMovements.length) {
+        deferredCombatEvents.push(...newCombatEvents);
+      } else {
+        completeMissileMovement(newCombatEvents);
+      }
+      return true;
+    } catch (_error) {
+      window.alert("The command could not be completed. Please try again.");
+      return false;
+    } finally {
+      requestInFlight = false;
     }
-    return true;
   };
 
   const enemies = () => state.ships.filter((ship) => ship.player !== player && !ship.destroyed);
@@ -159,9 +173,20 @@ export function mountMatch(root) {
     </g>`;
   };
   const playNextCombatEffect = () => {
-    if (combatEffectPlaying || combatEffectQueue.length === 0) return;
+    if (combatEffectPlaying) return;
+    if (combatEffectQueue.length === 0) {
+      if (combatResolutionPending && !damageReport) {
+        combatResolutionPending = false;
+        render();
+      }
+      return;
+    }
     const event = combatEffectQueue.shift(); const svg = root.querySelector(".battlefield svg");
-    if (!svg) return;
+    if (!svg) {
+      combatEffectQueue.length = 0;
+      combatResolutionPending = false;
+      return;
+    }
     combatEffectPlaying = true;
     svg.insertAdjacentHTML("beforeend", combatEffectMarkup(event));
     playWeaponSound(event);
@@ -180,6 +205,7 @@ export function mountMatch(root) {
     }, event.damage?.destroyed ? 2850 : 1650);
   };
   const enqueueCombatEffects = (events) => {
+    if (events.length) combatResolutionPending = true;
     combatEffectQueue.push(...events);
     playNextCombatEffect();
   };
@@ -416,6 +442,7 @@ export function mountMatch(root) {
   };
   const controls = (ship, target) => {
     const undoMovement = state.movement_undo?.player === player ? `<button class="secondary undo-movement">Undo last movement</button>` : "";
+    if (combatResolutionPending) return `<div class="control-stack">${activityStrip()}<p class="step-callout combat-resolution"><b>Resolving weapons fire</b>Firing effects and damage reports must finish before command advances.</p><button class="primary" disabled>Combat in progress</button></div>`;
     if (state.winner) return `<div class="control-stack">${undoMovement}<a class="button" href="/">Return to fleet selection</a></div>`;
     if (state.phase === "allocation") {
       const shieldCap = ship.size === "small" ? 1 : ship.size === "medium" ? 2 : 3;
@@ -525,12 +552,13 @@ export function mountMatch(root) {
     });
     root.querySelector(".commit-fleet")?.addEventListener("click", () => request("lock_allocation"));
     root.querySelector(".advance")?.addEventListener("click", () => request("advance_impulse"));
-    root.querySelector(".dismiss-impulse")?.addEventListener("click", () => {
+    const dismissImpulseModal = () => {
       impulseModalOpen = false;
       render();
       const combatEvents = deferredCombatEvents.splice(0);
       completeMissileMovement(combatEvents);
-    });
+    };
+    root.querySelector(".dismiss-impulse")?.addEventListener("click", dismissImpulseModal);
     root.querySelectorAll(".move-ship, .movement-choice").forEach((button) => button.addEventListener("click", () => request("move_ship", { ship_id: state.pending_movement[0], maneuver: button.dataset.maneuver })));
     root.querySelector(".undo-movement")?.addEventListener("click", () => request("undo_movement"));
     root.querySelectorAll(".movement-choice").forEach((button) => button.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); request("move_ship", { ship_id: state.pending_movement[0], maneuver: button.dataset.maneuver }); } }));
@@ -563,7 +591,7 @@ export function mountMatch(root) {
     root.querySelector(".schematic-backdrop")?.addEventListener("click", (event) => {
       if (event.target === event.currentTarget) closeSchematic();
     });
-    root.querySelector(".impulse-modal-backdrop")?.addEventListener("click", (event) => { if (event.target === event.currentTarget) { impulseModalOpen = false; render(); } });
+    root.querySelector(".impulse-modal-backdrop")?.addEventListener("click", (event) => { if (event.target === event.currentTarget) dismissImpulseModal(); });
     root.querySelector(".ship-schematic")?.addEventListener("keydown", (event) => {
       if (event.key === "Escape") closeSchematic();
     });
