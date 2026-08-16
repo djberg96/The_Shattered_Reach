@@ -7,8 +7,7 @@ module ShatteredReach
     BOARD_SIZES = [12, 15, 20].freeze
     DIRECTIONS = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]].freeze
     RNG_MASK = 0xffff_ffff
-    RNG_ACCEPTANCE_LIMIT = ((RNG_MASK + 1) / 6) * 6
-    RNG_STREAMS = %w[attack damage setup].freeze
+    RNG_STREAMS = %w[attack cards damage setup].freeze
     OPTIONAL_RULES = %w[acceleration_limits weapon_repair fast_turns].freeze
     SPEED_CHANGE_LIMITS = { "small" => 5, "medium" => 4, "large" => 3 }.freeze
     # A -1 die-roll penalty is equivalent to increasing the required result by 1.
@@ -835,7 +834,7 @@ module ShatteredReach
     def self.shuffled_card_indices(state)
       indices = [0, 1, 2, 3]
       3.downto(1) do |index|
-        swap = (next_roll(state, stream: "setup") - 1) % (index + 1)
+        swap = next_random_integer(state, index + 1, stream: "cards")
         indices[index], indices[swap] = indices[swap], indices[index]
       end
       indices
@@ -863,22 +862,29 @@ module ShatteredReach
     private_class_method :normalized_rng
 
     def self.next_roll(state, stream: "attack")
+      next_random_integer(state, 6, stream: stream) + 1
+    end
+    private_class_method :next_roll
+
+    def self.next_random_integer(state, upper_bound, stream:)
       raise ArgumentError, "Unknown random stream" unless RNG_STREAMS.include?(stream)
+      raise ArgumentError, "Upper bound must be positive" unless upper_bound.to_i.positive?
 
       unless state["rng"].is_a?(Hash) && state.dig("rng", "streams").is_a?(Hash) && state["rng"]["streams"].key?(stream)
         state["rng"] = normalized_rng(state["rng"])
       end
+      acceptance_limit = ((RNG_MASK + 1) / upper_bound) * upper_bound
       loop do
         counter = state.dig("rng", "streams", stream).to_i & RNG_MASK
         # Hashing seed, stream, and counter gives each subsystem an independent,
-        # reproducible sequence. Rejecting the four values above this boundary
-        # removes the tiny modulo bias that `% 6` would otherwise introduce.
+        # reproducible sequence. Rejecting values above the largest complete
+        # multiple of the requested range removes modulo bias for dice and cards.
         value = Digest::SHA256.digest("#{state.fetch("seed", 17)}:#{stream}:#{counter}").unpack1("L>")
         state["rng"]["streams"][stream] = (counter + 1) & RNG_MASK
-        return (value % 6) + 1 if value < RNG_ACCEPTANCE_LIMIT
+        return value % upper_bound if value < acceptance_limit
       end
     end
-    private_class_method :next_roll
+    private_class_method :next_random_integer
     def self.ships_for(state, player) = state["ships"].select { |ship| ship["player"] == player && !ship["destroyed"] }
     def self.owned_ship!(state, player, id) = ships_for(state, player).find { |ship| ship["id"] == id } || raise(IllegalAction, "Ship is not under your command")
     def self.require_phase!(state, phase)

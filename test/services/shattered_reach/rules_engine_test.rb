@@ -117,8 +117,29 @@ class ShatteredReach::RulesEngineTest < ActiveSupport::TestCase
     ShatteredReach::RulesEngine.normalize!(state)
 
     assert_equal "sha256-counter-v1", state.dig("rng", "algorithm")
-    assert_equal %w[attack damage setup], state.dig("rng", "streams").keys.sort
+    assert_equal %w[attack cards damage setup], state.dig("rng", "streams").keys.sort
     assert state.dig("rng", "streams").values.all?(&:zero?)
+  end
+
+  test "impulse card shuffles are isolated from initiative rolls" do
+    control = ShatteredReach::RulesEngine.start(seed: 81_223)
+    perturbed = ShatteredReach::RulesEngine.start(seed: 81_223)
+    40.times { ShatteredReach::RulesEngine.send(:next_roll, perturbed, stream: "setup") }
+
+    expected = ShatteredReach::RulesEngine.send(:shuffled_card_indices, control)
+    actual = ShatteredReach::RulesEngine.send(:shuffled_card_indices, perturbed)
+
+    assert_equal expected, actual
+  end
+
+  test "all impulse card permutations are evenly distributed over a large deterministic sample" do
+    state = ShatteredReach::RulesEngine.start(seed: 72_901)
+    counts = 24_000.times.map { ShatteredReach::RulesEngine.send(:shuffled_card_indices, state) }.tally
+
+    assert_equal 24, counts.length
+    [0, 1, 2, 3].permutation.each do |permutation|
+      assert_in_delta 1_000, counts.fetch(permutation), 150, "permutation #{permutation.join} should remain near one twenty-fourth of all shuffles"
+    end
   end
 
   test "ship movement paths begin at the turn-start hex and record translations" do
