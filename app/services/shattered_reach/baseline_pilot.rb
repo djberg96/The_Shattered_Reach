@@ -84,6 +84,7 @@ module ShatteredReach
       ship_id = state.fetch("pending_movement").first
       ship = state.fetch("ships").find { |entry| entry["id"] == ship_id && entry["player"] == player && !entry["destroyed"] }
       return unless ship
+      return { action: "finish_movement", payload: { "ship_id" => ship["id"] } } if state["movement_stage"] == "after"
 
       targets = state.fetch("ships").select { |entry| entry["player"] != player && !entry["destroyed"] }
       target = targets.min_by { |entry| RulesEngine.distance(ship["position"], entry["position"]) }

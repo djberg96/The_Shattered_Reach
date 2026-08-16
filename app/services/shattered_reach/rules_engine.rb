@@ -44,7 +44,7 @@ module ShatteredReach
         "version" => GameDefinition::VERSION, "scenario" => scenario.to_s, "solo" => solo, "board_size" => board_size, "turn" => 1,
         "phase" => "allocation", "impulse" => 0, "seed" => seed.to_i & RNG_MASK, "rng" => initial_rng, "initiative" => nil,
         "activity_step" => "allocation", "impulse_card" => nil, "impulse_phase" => nil, "impulse_card_number" => nil,
-        "impulse_order" => nil, "pending_movement" => [], "movement_options" => [],
+        "impulse_order" => nil, "pending_movement" => [], "movement_options" => [], "movement_stage" => nil,
         "ships" => ships, "missiles" => [], "next_missile_id" => 1,
         "combat_events" => [], "next_combat_event_id" => 1,
         "log" => ["Battle stations. Allocate energy in secret."], "winner" => nil,
@@ -132,6 +132,7 @@ module ShatteredReach
       when "lock_allocation" then lock_allocation!(state, player)
       when "advance_impulse" then draw_impulse!(state)
       when "move_ship" then move_ship!(state, player, payload)
+      when "finish_movement" then finish_movement!(state, player, payload)
       when "launch_missile" then launch_missile_action!(state, player, payload)
       when "finish_launches" then finish_launches!(state)
       when "fire" then fire!(state, player, payload)
@@ -165,6 +166,9 @@ module ShatteredReach
       end
       state["pending_movement"] ||= []
       state["movement_options"] ||= []
+      state["movement_stage"] = if state["activity_step"] == "movement" && state["pending_movement"].any?
+                                  state["movement_stage"] == "after" ? "after" : "before"
+                                end
 
       state["ships"].each do |ship|
         spec = GameDefinition::SHIPS[ship["key"]]
@@ -280,6 +284,7 @@ module ShatteredReach
         [ship.dig("allocation", "speed"), initiative_order]
       end.map { |ship| ship["id"] }
       state["activity_step"] = "movement"
+      state["movement_stage"] = state["pending_movement"].any? ? "before" : nil
       log!(state, "Impulse #{state["impulse"]}: speeds #{card.join(", ")} may move.")
       if state["pending_movement"].empty?
         complete_movement!(state)
@@ -316,9 +321,27 @@ module ShatteredReach
       when "lose_movement"
         log!(state, "#{ship["name"]} has no legal maneuver and loses its movement.")
       end
-      resolve_pending_movement!(state, ship)
+      if ship["destroyed"] || !ship["special_available"] || payload["offer_special_after"] != true
+        resolve_pending_movement!(state, ship)
+      else
+        state["movement_stage"] = "after"
+        state["movement_options"] = []
+        log!(state, "#{ship["name"]} may use its special maneuver after moving or complete movement.")
+      end
     end
     private_class_method :move_ship!
+
+    def self.finish_movement!(state, player, payload)
+      require_phase!(state, "impulse")
+      require_activity_step!(state, "movement")
+      ship = owned_ship!(state, player, payload.fetch("ship_id"))
+      raise IllegalAction, "Another ship moves first" unless state["pending_movement"].first == ship["id"]
+      raise IllegalAction, "This ship has not completed its normal movement" unless state["movement_stage"] == "after"
+
+      log!(state, "#{ship["name"]} completes movement without using its special maneuver.")
+      resolve_pending_movement!(state, ship)
+    end
+    private_class_method :finish_movement!
 
     def self.legal_movement_actions(state, ship_id)
       ship = state["ships"].find { |entry| entry["id"] == ship_id && !entry["destroyed"] }
@@ -384,6 +407,7 @@ module ShatteredReach
       if state["pending_movement"].empty?
         complete_movement!(state)
       else
+        state["movement_stage"] = "before"
         update_movement_options!(state)
       end
     end
@@ -397,6 +421,7 @@ module ShatteredReach
     def self.complete_movement!(state)
       state["pending_movement"] = []
       state["movement_options"] = []
+      state["movement_stage"] = nil
       state["activity_step"] = "launch"
       state["tutorial_step"] = 2 if state["scenario"] == "tutorial" && state["impulse"] == 1
       move_missiles!(state)
@@ -589,6 +614,7 @@ module ShatteredReach
       ship = owned_ship!(state, player, payload.fetch("ship_id"))
       raise IllegalAction, "Another ship moves first" unless state["pending_movement"].first == ship["id"]
       raise IllegalAction, "Special maneuver unavailable" unless ship["special_available"]
+      movement_stage = state["movement_stage"]
       maneuver = payload.fetch("maneuver")
       case maneuver
       when "bootlegger"
@@ -603,7 +629,7 @@ module ShatteredReach
       end
       ship["special_available"] = false
       log!(state, "#{ship["name"]} executes #{maneuver.tr("_", " ")}.")
-      if maneuver == "quick_stop" || ship["destroyed"]
+      if maneuver == "quick_stop" || ship["destroyed"] || movement_stage == "after"
         resolve_pending_movement!(state, ship)
       else
         update_movement_options!(state)

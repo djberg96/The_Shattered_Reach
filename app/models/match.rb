@@ -18,7 +18,7 @@ class Match < ApplicationRecord
     self.state = ShatteredReach::RulesEngine.apply(current_state, player: player, action: action, payload: payload)
     if state["solo"] && player == "player_one"
       run_solo_opponent! if action.to_s == "lock_allocation" && state["phase"] == "allocation"
-      if %w[advance_impulse move_ship special].include?(action.to_s) && state["phase"] == "impulse" && !state["winner"]
+      if %w[advance_impulse move_ship finish_movement special].include?(action.to_s) && state["phase"] == "impulse" && !state["winner"]
         run_solo_movement!
         run_solo_launch! if state["activity_step"] == "launch"
       end

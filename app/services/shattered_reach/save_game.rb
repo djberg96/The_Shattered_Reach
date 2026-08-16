@@ -131,6 +131,9 @@ module ShatteredReach
       ship_ids = state["ships"].map { |ship| ship["id"] }
       state["pending_movement"] = Array(state["pending_movement"]).select { |id| ship_ids.include?(id) }.uniq
       state["movement_options"] = Array(state["movement_options"]) & %w[forward sideslip_left sideslip_right turn_left turn_right lose_movement]
+      state["movement_stage"] = if state["activity_step"] == "movement" && state["pending_movement"].any?
+                                  state["movement_stage"] == "after" ? "after" : "before"
+                                end
       state
     end
     private_class_method :canonicalize!

@@ -151,6 +151,44 @@ class ShatteredReach::RulesEngineTest < ActiveSupport::TestCase
     assert_equal [ship["position"].first(2)], result["ships"].first["movement_path"]
   end
 
+  test "a ship may preserve its special token after completing normal movement" do
+    state = ShatteredReach::RulesEngine.start
+    ship = state["ships"].first
+    state["phase"] = "impulse"
+    state["activity_step"] = "movement"
+    state["pending_movement"] = [ship["id"]]
+    state["movement_options"] = ShatteredReach::RulesEngine.legal_movement_actions(state, ship["id"])
+
+    state = ShatteredReach::RulesEngine.apply(state, player: ship["player"], action: "move_ship", payload: { "ship_id" => ship["id"], "maneuver" => "forward", "offer_special_after" => true })
+
+    assert_equal "after", state["movement_stage"]
+    assert_equal [ship["id"]], state["pending_movement"]
+    assert_empty state["movement_options"]
+    assert state["ships"].first["special_available"]
+
+    state = ShatteredReach::RulesEngine.apply(state, player: ship["player"], action: "finish_movement", payload: { "ship_id" => ship["id"] })
+
+    assert_equal "launch", state["activity_step"]
+    assert state["ships"].first["special_available"]
+  end
+
+  test "a ship may execute emergency power after normal movement" do
+    state = ShatteredReach::RulesEngine.start
+    ship = state["ships"].first
+    origin = ship["position"].first(2)
+    state["phase"] = "impulse"
+    state["activity_step"] = "movement"
+    state["pending_movement"] = [ship["id"]]
+    state["movement_options"] = ShatteredReach::RulesEngine.legal_movement_actions(state, ship["id"])
+
+    state = ShatteredReach::RulesEngine.apply(state, player: ship["player"], action: "move_ship", payload: { "ship_id" => ship["id"], "maneuver" => "forward", "offer_special_after" => true })
+    state = ShatteredReach::RulesEngine.apply(state, player: ship["player"], action: "special", payload: { "ship_id" => ship["id"], "maneuver" => "emergency_power" })
+
+    assert_equal [origin[0] + 2, origin[1]], state["ships"].first["position"].first(2)
+    refute state["ships"].first["special_available"]
+    assert_equal "launch", state["activity_step"]
+  end
+
   test "movement paths reset to each ship's current hex at the start of a new turn" do
     state = ShatteredReach::RulesEngine.start
     ship = state["ships"].first
