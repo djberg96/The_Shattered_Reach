@@ -44,6 +44,13 @@
   \par\medskip
 }
 \newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+\makeatletter
+\newcommand{\inlinecontents}{%
+  \par\bigskip
+  {\sffamily\Large\bfseries\color{reachsteel}Contents\par}\smallskip
+  \@starttoc{toc}%
+}
+\makeatother
 
 \begin{document}
 \begin{titlingpage}
@@ -78,9 +85,10 @@
 \end{titlingpage}
 
 \frontmatter
-\tableofcontents*
-\mainmatter
 \input{chapters/01-setting}
+\inlinecontents
+\clearpage
+\mainmatter
 \input{chapters/02-overview-setup}
 \input{chapters/03-turn-sequence}
 \input{chapters/04-movement}
