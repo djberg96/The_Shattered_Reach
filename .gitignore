@@ -6,6 +6,7 @@
 /db/*.sqlite3
 /public/assets/
 /docs/rulebook/build/
+/docs/ship-cards/build/
 !/tmp/.keep
 !/log/.keep
 !/storage/.keep

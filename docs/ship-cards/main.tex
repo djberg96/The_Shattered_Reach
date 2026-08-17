@@ -1,0 +1,222 @@
+\documentclass[letterpaper]{article}
+\usepackage[margin=0.25in]{geometry}
+\usepackage{fontspec,graphicx,xcolor,tikz,amssymb}
+\usetikzlibrary{calc,shapes.geometric}
+\pagestyle{empty}
+\setlength{\parindent}{0pt}
+\setmainfont{Avenir Next}
+\setsansfont{Avenir Next}
+\setmonofont{Menlo}
+\graphicspath{{../../app/assets/images/ships/tactical/}}
+
+\definecolor{paper}{HTML}{F1EFE6}
+\definecolor{ink}{HTML}{10182B}
+\definecolor{void}{HTML}{090F22}
+\definecolor{muted}{HTML}{596274}
+\definecolor{grid}{HTML}{C9CDD2}
+\definecolor{aurelian}{HTML}{D59B35}
+\definecolor{veyr}{HTML}{5D8FDD}
+\definecolor{kestrel}{HTML}{D77D4D}
+\definecolor{hulltrack}{HTML}{B98735}
+\definecolor{shieldtrack}{HTML}{527FC6}
+\definecolor{reactortrack}{HTML}{3995A8}
+
+\tikzset{
+  cardlabel/.style={font=\sffamily\bfseries\fontsize{5.4}{6.2}\selectfont, text=muted},
+  cardmono/.style={font=\ttfamily\fontsize{5.2}{6}\selectfont, text=ink},
+  tinytech/.style={font=\ttfamily\bfseries\fontsize{4.7}{5.2}\selectfont, text=ink}
+}
+
+\newenvironment{shipcard}{%
+  \begin{minipage}[t][5in][t]{4in}\centering
+  \begin{tikzpicture}[x=1in,y=1in]
+  \path[use as bounding box] (0,0) rectangle (4,5);
+}{%
+  \end{tikzpicture}
+  \end{minipage}%
+}
+
+\newcommand{\CardFrame}[1]{%
+  \fill[paper] (0,0) rectangle (4,5);
+  \draw[grid!38,line width=.22pt] (0.13,0.13) grid[step=.25] (3.87,4.87);
+  \fill[void] (0.12,2.55) rectangle (2.06,4.31);
+  \fill[#1] (0,4.87) rectangle (4,5);
+  \draw[#1,line width=1.15pt] (0.03,0.03) rectangle (3.97,4.97);
+  \draw[ink,line width=.28pt] (0.12,0.12) rectangle (3.88,4.88);
+}
+
+\newcommand{\CardHeader}[4]{%
+  \node[anchor=west,font=\sffamily\bfseries\fontsize{5.6}{6.2}\selectfont,text=muted] at (0.20,4.66) {\MakeUppercase{#1}};
+  \node[anchor=west,font=\sffamily\bfseries\fontsize{14}{14.5}\selectfont,text=ink] at (0.18,4.42) {#2};
+  \node[anchor=east,font=\ttfamily\bfseries\fontsize{5.2}{6}\selectfont,text=muted] at (3.80,4.66) {#3 HULL};
+  \node[anchor=east,font=\ttfamily\bfseries\fontsize{8}{8}\selectfont,text=ink] at (3.80,4.40) {ENERGY #4};
+}
+
+\newcommand{\CardArt}[1]{%
+  \node[inner sep=0] at (1.10,3.38) {\includegraphics[width=1.72in,height=1.72in,keepaspectratio]{#1}};
+  \node[anchor=south west,font=\ttfamily\fontsize{4.4}{5}\selectfont,text=paper!72] at (0.20,2.60) {TACTICAL / ENGINEERING OVERLAY};
+}
+
+\newcommand{\Hardpoint}[3]{%
+  \node[draw=paper,fill=void,rounded corners=.7pt,minimum width=.20in,minimum height=.16in,inner sep=1pt,font=\ttfamily\bfseries\fontsize{4.8}{5}\selectfont,text=paper] at (#1,#2) {#3};
+}
+
+\newcommand{\DamageTrack}[4]{%
+  \node[anchor=west,cardlabel] at (2.16,#1+0.12) {#2};
+  \node[anchor=east,cardmono] at (3.80,#1+0.12) {#3};
+  \foreach \n in {1,...,#3}{%
+    \pgfmathsetmacro{\boxx}{2.17+(\n-1)*0.177}%
+    \draw[#4,line width=.6pt,fill=white] (\boxx,#1-0.09) rectangle ++(0.145,0.145);
+  }%
+}
+
+\newcommand{\ReactorTrack}[1]{%
+  \node[anchor=west,cardlabel] at (2.16,3.12) {REACTOR / ENGINES};
+  \node[anchor=east,cardmono] at (3.80,3.12) {#1};
+  \foreach \n in {1,...,#1}{%
+    \pgfmathtruncatemacro{\row}{(\n-1)/8}%
+    \pgfmathtruncatemacro{\col}{mod(\n-1,8)}%
+    \pgfmathsetmacro{\boxx}{2.17+\col*0.197}%
+    \pgfmathsetmacro{\boxy}{2.85-\row*0.18}%
+    \draw[reactortrack,line width=.55pt,fill=white] (\boxx,\boxy) rectangle ++(0.165,0.14);
+  }%
+}
+
+\newcommand{\WeaponHeader}{%
+  \fill[ink] (0.12,2.35) rectangle (3.88,2.55);
+  \node[anchor=west,font=\sffamily\bfseries\fontsize{6}{6}\selectfont,text=paper] at (0.20,2.45) {WEAPON SYSTEMS};
+  \node[anchor=east,font=\ttfamily\fontsize{4.5}{5}\selectfont,text=paper!75] at (3.80,2.45) {MARK BOX WHEN DESTROYED};
+}
+
+\newcommand{\WeaponRow}[6]{%
+  \draw[grid,line width=.3pt] (0.16,#1-0.11) -- (3.84,#1-0.11);
+  \node[anchor=west,font=\ttfamily\bfseries\fontsize{6.2}{6.5}\selectfont,text=ink] at (0.20,#1) {#2};
+  \node[anchor=west,tinytech] at (0.69,#1) {#3};
+  \node[anchor=west,tinytech] at (1.58,#1) {ARC #4};
+  \node[anchor=west,tinytech] at (2.48,#1) {#5};
+  \foreach \n in {1,...,#6}{%
+    \pgfmathsetmacro{\boxx}{3.17+(\n-1)*0.205}%
+    \draw[ink,line width=.55pt,fill=white] (\boxx,#1-0.075) rectangle ++(0.155,0.155);
+  }%
+}
+
+\newcommand{\AmmoRow}[3]{%
+  \node[anchor=west,font=\ttfamily\bfseries\fontsize{4.5}{5}\selectfont,text=muted] at (0.69,#1) {AMMO};
+  \foreach \rack in {1,...,#2}{%
+    \foreach \round in {1,...,#3}{%
+      \pgfmathsetmacro{\ammox}{1.58+(\rack-1)*(#3*0.125+0.105)+(\round-1)*0.125}%
+      \draw[kestrel,line width=.45pt,fill=white] (\ammox,#1-0.045) rectangle ++(0.095,0.095);
+    }%
+  }%
+}
+
+\newcommand{\TurnStrip}[4]{%
+  \fill[void] (0.12,0.12) rectangle (3.88,0.56);
+  \node[anchor=west,font=\sffamily\bfseries\fontsize{5.6}{6}\selectfont,text=paper] at (0.20,0.42) {TURN MODE};
+  \node[anchor=west,font=\ttfamily\fontsize{5}{5.6}\selectfont,text=paper] at (0.20,0.23) {1--4: #1 \quad 5--8: #2 \quad 9--12: #3};
+  \node[anchor=east,font=\ttfamily\bfseries\fontsize{4.8}{5.2}\selectfont,text=paper] at (3.78,0.34) {#4};
+}
+
+\newcommand{\ReferenceFrame}[3]{%
+  \fill[paper] (0,0) rectangle (4,5);
+  \draw[grid!38,line width=.22pt] (0.13,0.13) grid[step=.25] (3.87,4.87);
+  \fill[#1] (0,4.87) rectangle (4,5);
+  \draw[#1,line width=1.15pt] (0.03,0.03) rectangle (3.97,4.97);
+  \draw[ink,line width=.28pt] (0.12,0.12) rectangle (3.88,4.88);
+  \node[anchor=west,font=\sffamily\bfseries\fontsize{5.5}{6}\selectfont,text=muted] at (0.20,4.66) {THE SHATTERED REACH};
+  \node[anchor=west,font=\sffamily\bfseries\fontsize{15}{16}\selectfont,text=ink] at (0.18,4.39) {#2};
+  \node[anchor=east,font=\ttfamily\bfseries\fontsize{5}{5.5}\selectfont,text=#1] at (3.80,4.66) {#3};
+}
+
+\newcommand{\ReferenceBand}[2]{%
+  \fill[ink] (0.20,#1-0.12) rectangle (3.80,#1+0.12);
+  \node[anchor=west,font=\sffamily\bfseries\fontsize{6.2}{6.4}\selectfont,text=paper] at (0.28,#1) {#2};
+}
+
+\newcommand{\WeaponReferenceCard}{%
+\begin{shipcard}
+  \ReferenceFrame{aurelian}{Weapon Reference}{RANGE / HIT / DAMAGE}
+  \ReferenceBand{4.02}{LANCE BEAM · 2 ENERGY}
+  \MatrixHeader{3.72}
+  \MatrixRow{3.48}{SHORT}{1--3}{2+}{3}
+  \MatrixRow{3.23}{MEDIUM}{4--6}{3+}{2}
+  \MatrixRow{2.98}{LONG}{7--9}{4+}{1}
+  \ReferenceBand{2.62}{MASS DRIVER · 1 ENERGY}
+  \MatrixHeader{2.32}
+  \MatrixRow{2.08}{SHORT}{1--4}{3+}{2}
+  \MatrixRow{1.83}{MEDIUM}{5--8}{4+}{2}
+  \MatrixRow{1.58}{LONG}{9--12}{5+}{2}
+  \ReferenceBand{1.20}{SEEKER MISSILE · NO ENERGY}
+  \node[anchor=north west,text width=3.42in,font=\sffamily\fontsize{7.2}{8.5}\selectfont,text=ink] at (0.28,1.02) {Moves 2 hexes each impulse after the impulse in which it launches. Contact deals 3 damage. Direct weapons suffer $-1$ to hit a missile; any hit destroys it.};
+\end{shipcard}}
+
+\newcommand{\MatrixHeader}[1]{%
+  \node[anchor=west,tinytech] at (0.30,#1) {BAND};
+  \node[anchor=west,tinytech] at (1.20,#1) {RANGE};
+  \node[anchor=west,tinytech] at (2.22,#1) {HIT};
+  \node[anchor=west,tinytech] at (3.05,#1) {DAMAGE};
+}
+\newcommand{\MovementHeader}[1]{%
+  \node[anchor=west,tinytech] at (0.30,#1) {CLASS};
+  \node[anchor=west,tinytech] at (1.20,#1) {HEXES};
+  \node[anchor=west,tinytech] at (2.22,#1) {SPEED BANDS};
+}
+\newcommand{\MatrixRow}[5]{%
+  \draw[grid,line width=.35pt] (0.24,#1-0.11) rectangle (3.76,#1+0.11);
+  \node[anchor=west,cardmono] at (0.30,#1) {#2};
+  \node[anchor=west,cardmono] at (1.20,#1) {#3};
+  \node[anchor=west,cardmono] at (2.22,#1) {#4};
+  \node[anchor=west,cardmono] at (3.15,#1) {#5};
+}
+
+\newcommand{\MovementReferenceCard}{%
+\begin{shipcard}
+  \ReferenceFrame{veyr}{Movement Reference}{IMPULSE MOVEMENT}
+  \ReferenceBand{4.02}{TURN MODE · FORWARD HEXES REQUIRED}
+  \MovementHeader{3.72}
+  \MatrixRow{3.48}{SMALL}{0 / 1 / 2}{1--4 / 5--8 / 9--12}{}
+  \MatrixRow{3.23}{MEDIUM}{1 / 2 / 3}{1--4 / 5--8 / 9--12}{}
+  \MatrixRow{2.98}{LARGE}{2 / 3 / 4}{1--4 / 5--8 / 9--12}{}
+  \ReferenceBand{2.62}{NORMAL MOVEMENT}
+  \ReferenceBullet{2.34}{Move forward one hex without changing facing.}
+  \ReferenceBullet{2.04}{Side-slip one forward-diagonal hex; facing is unchanged.}
+  \ReferenceBullet{1.74}{After satisfying turn mode, rotate 60\textdegree. With Fast Turns, then move forward.}
+  \ReferenceBand{1.32}{ONE-TIME SPECIAL MANEUVER}
+  \ReferenceBullet{1.04}{Bootlegger: rotate freely after movement.}
+  \ReferenceBullet{0.76}{Quick Stop: reduce speed to zero after movement.}
+  \ReferenceBullet{0.48}{Emergency Power: make one extra forward move.}
+\end{shipcard}}
+
+\newcommand{\ReferenceBullet}[2]{%
+  \node[anchor=north west,text width=3.42in,font=\sffamily\fontsize{6.8}{8}\selectfont,text=ink] at (0.38,#1+0.09) {\textcolor{veyr}{\textbullet}\hspace{.08in}#2};
+}
+
+\newcommand{\DamageReferenceCard}{%
+\begin{shipcard}
+  \ReferenceFrame{kestrel}{Turn \& Damage}{COMMAND REFERENCE}
+  \ReferenceBand{4.02}{TURN SEQUENCE}
+  \NumberedLine{3.72}{1}{Allocate energy secretly.}
+  \NumberedLine{3.43}{2}{Announce speed; determine initiative.}
+  \NumberedLine{3.14}{3}{Resolve 12 impulses: move, launch, fire.}
+  \NumberedLine{2.85}{4}{Repair funded systems; begin a new turn.}
+  \ReferenceBand{2.48}{DAMAGE PAST SHIELDS · ROLL 1D6 PER POINT}
+  \DamageLine{2.17}{1--3}{HULL}{Mark one hull box.}
+  \DamageLine{1.83}{4--5}{ENGINE}{Mark one reactor / engine box.}
+  \DamageLine{1.49}{6}{WEAPON}{Mark one available weapon-system box.}
+  \ReferenceBand{1.12}{SHIELDS / REPAIR}
+  \node[anchor=north west,text width=3.40in,font=\sffamily\fontsize{6.7}{8}\selectfont,text=ink] at (0.28,0.94) {Reinforcement absorbs damage first, then the struck shield bank. Spend 2 energy during allocation to restore one damaged shield box at turn end. Optional weapon repair costs 3 energy.};
+\end{shipcard}}
+
+\newcommand{\NumberedLine}[3]{%
+  \node[circle,draw=kestrel,fill=white,minimum size=.20in,inner sep=0,font=\ttfamily\bfseries\fontsize{5.5}{6}\selectfont,text=ink] at (0.39,#1) {#2};
+  \node[anchor=west,font=\sffamily\fontsize{7}{8}\selectfont,text=ink] at (0.58,#1) {#3};
+}
+\newcommand{\DamageLine}[4]{%
+  \node[anchor=west,font=\ttfamily\bfseries\fontsize{7}{8}\selectfont,text=kestrel] at (0.28,#1) {#2};
+  \node[anchor=west,font=\sffamily\bfseries\fontsize{7}{8}\selectfont,text=ink] at (0.90,#1) {#3};
+  \node[anchor=west,font=\sffamily\fontsize{6.5}{7.5}\selectfont,text=muted] at (1.72,#1) {#4};
+}
+
+\begin{document}
+\noindent\input{build/cards.tex}
+\end{document}
