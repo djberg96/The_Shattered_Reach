@@ -1,0 +1,71 @@
+\chapter{Turn Sequence and Energy}
+
+Each turn has an allocation segment followed by twelve impulses. Each impulse contains movement, missile launch, and direct-fire steps in that order.
+
+\section{Complete sequence of play}
+
+\begin{enumerate}
+  \item \phase{Allocate Energy.} Each commander secretly plans every surviving ship.
+  \item \phase{Commit Fleets.} When both commands are ready, reveal allocations and announce each ship's speed.
+  \item \phase{Determine Initiative.} Each side rolls one die; the high roll wins. Re-roll ties.
+  \item \phase{Resolve Twelve Impulses.}
+  \begin{enumerate}[label=\alph*.]
+    \item Draw the next card from the current phase deck.
+    \item Move every ship whose speed appears, slowest first. Then move all missiles already on the map.
+    \item Launch any missiles.
+    \item Fire any eligible lance beams and mass drivers.
+  \end{enumerate}
+  \item \phase{Check Victory.} Resolve destruction and determine whether the battle has ended.
+  \item \phase{End the Turn.} Complete funded shield repairs, clear expended allocations, reset unfired status, and begin a new turn.
+\end{enumerate}
+
+\section{Allocate energy}
+
+Each undamaged reactor / engine box generates one energy. Secretly assign that energy among:
+
+\begin{itemize}
+  \item \term{Speed}: one energy buys one point of speed, from 0 to 12.
+  \item \term{Lance beams}: two energy charges one beam weapon.
+  \item \term{Mass drivers}: one energy charges one mass-driver weapon.
+  \item \term{Shield reinforcement}: one energy absorbs one damage against the chosen shield during this turn.
+  \item \term{Shield repair}: two energy schedules one damaged shield box for restoration at the end of the turn.
+  \item \term{Weapon repair}: three energy repairs one eligible direct-fire weapon when that optional rule is enabled.
+\end{itemize}
+
+Missiles require no energy. A commander is never required to spend all available energy; unspent energy is lost when the allocation is committed.
+
+When commanding multiple ships, complete and save a plan for each surviving ship before committing the fleet. Committing makes every ship's plan final for the turn.
+
+\section{Announce speed and initiative}
+
+After both commands commit, announce every ship's speed. All other allocation details also become public in tabletop play. Each side rolls one die for initiative; high roll wins, with ties re-rolled.
+
+Initiative settles simultaneous choices. When equal-speed ships are due to move, the side with initiative determines the order. If both sides want to use a special maneuver at the same moment, initiative decides which resolves first. It likewise settles ambiguous shield facings and, where necessary, firing declarations.
+
+\section{Impulse decks}
+
+The twelve cards are arranged as three separately shuffled phase decks:
+
+\begin{center}
+\begin{tabular}{lccc}\toprule
+Impulses & 1--4 & 5--8 & 9--12\\\midrule
+Deck & Phase 1 & Phase 2 & Phase 3\\\bottomrule
+\end{tabular}
+\end{center}
+
+Each card lists the speeds that receive one movement opportunity. A ship moves if its announced speed appears on the card. Across the complete twelve-card sequence, a ship moving at speed $N$ receives exactly $N$ movement opportunities.
+
+\important{SLOWEST FIRST}{Resolve eligible ships from lowest speed to highest speed. When two ships have the same speed, use initiative to determine their order. Every eligible ship receives its own movement choice.}
+
+\section{Worked impulse}
+
+Suppose an impulse card lists speeds 4, 6, 8, 10, and 12. A speed-4 enemy cruiser and two friendly speed-6 frigates are on the map.
+
+\begin{enumerate}
+  \item The speed-4 cruiser resolves its movement first.
+  \item The two speed-6 frigates then resolve separately in the order determined by initiative. One may move forward while the other side-slips.
+  \item All missiles launched in earlier impulses move up to two hexes toward their assigned targets.
+  \item Ships may launch new missiles. Those missiles remain in their launch hex during this impulse.
+  \item Eligible ships may fire charged lance beams and mass drivers, one weapon at a time.
+  \item When both sides finish firing, end the impulse and draw the next card.
+\end{enumerate}

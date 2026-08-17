@@ -1,0 +1,82 @@
+\chapter{Shields, Damage, and Repair}
+
+\section{Shield facing}
+
+Every ship has a forward shield and an aft shield. An attack arriving through the forward half of the ship strikes the forward shield; an attack through the rear half strikes the aft shield. If the line of fire lies exactly on the boundary, the side with initiative chooses which bank is hit.
+
+Shields are always active while at least one box remains; they do not require energy merely to function.
+
+\section{Shield reinforcement}
+
+During allocation, assign reinforcement separately to the forward and aft banks. Each reinforcement energy absorbs one damage against that bank during the current turn. Reinforcement is lost when used and does not restore permanent shield boxes.
+
+The reinforcement limit applies independently to each shield bank:
+
+\begin{center}
+\begin{tabular}{lccc}\toprule
+Hull class & Small & Medium & Large\\\midrule
+Maximum reinforcement per bank & 1 & 2 & 3\\\bottomrule
+\end{tabular}
+\end{center}
+
+A completely collapsed shield cannot be reinforced. It may still be repaired.
+
+\section{Resolve a hit}
+
+Apply each hit in this order:
+
+\begin{enumerate}
+  \item Determine whether the forward or aft shield was struck.
+  \item Remove reinforcement assigned to that bank, one point per damage.
+  \item Remove permanent shield boxes from that bank, one per remaining damage.
+  \item For every point still remaining, roll once on the Internal Damage table.
+\end{enumerate}
+
+\begin{center}
+\begin{tabularx}{.82\linewidth}{c l Y}\toprule
+Die & Result & Effect\\\midrule
+1--3 & Hull & Damage one hull box. Destroy the ship immediately when no hull boxes remain.\\
+4--5 & Engine & Damage one reactor / engine box. The ship generates one less energy on later turns.\\
+6 & Weapon & The owning player chooses one undestroyed weapon and marks it destroyed. If none remain, apply one hull damage instead.\\\bottomrule
+\end{tabularx}
+\end{center}
+
+A weapon is destroyed by one damage even if its energy cost is represented by multiple boxes. Destroying a missile launcher also destroys all ammunition still assigned to that launcher.
+
+\section{Shield repair}
+
+If either shield is below its printed maximum, spend two energy during allocation and choose the forward or aft bank. At the end of the turn, restore one box to that bank. A ship may repair a completely collapsed shield. Only one shield box may be repaired by a ship per turn.
+
+\section{Optional weapon repair}
+
+When the Weapon Repair option is enabled, spend three energy during allocation to repair one destroyed lance beam or mass driver. Missile launchers cannot be repaired. The repaired weapon is restored when allocation is committed but remains offline for that entire turn; it may be charged normally on the following turn.
+
+\section{End of turn}
+
+After the twelfth impulse:
+
+\begin{enumerate}
+  \item check victory conditions;
+  \item complete each funded shield repair;
+  \item return energy to every undamaged reactor / engine box;
+  \item discard unused shield reinforcement and all other allocations;
+  \item ready surviving weapons that were fired, except weapons repaired during the ending turn;
+  \item reset turn-mode progress and begin secret allocation for the next turn.
+\end{enumerate}
+
+Destroyed engine boxes generate no energy.
+
+\section{Victory points and victory}
+
+For a scored tabletop battle, gain one victory point for every enemy hull box damaged. Gain an additional destruction bonus when an enemy ship is destroyed:
+
+\begin{center}
+\begin{tabular}{lccc}\toprule
+Destroyed hull class & Small & Medium & Large\\\midrule
+Bonus VP & 1 & 2 & 3\\\bottomrule
+\end{tabular}
+\end{center}
+
+The player with the most points wins. If tied, a player with at least one surviving ship on the map defeats a player with none. If both sides still have ships, the game is a draw. A ship that leaves the map counts as destroyed.
+
+The browser prototype currently ends an elimination battle as soon as only one command has surviving ships.

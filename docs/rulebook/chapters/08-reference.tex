@@ -1,0 +1,65 @@
+\chapter{Optional Rules}
+
+Choose any combination of these rules before the battle. Both commands use the same options for the entire engagement.
+
+\section{Acceleration and deceleration limits}
+
+Ships may select any legal speed on turn 1. On later turns, maximum speed change depends on hull class:
+
+\begin{center}
+\begin{tabular}{lccc}\toprule
+Hull class & Small & Medium & Large\\\midrule
+Maximum change per turn & 5 & 4 & 3\\\bottomrule
+\end{tabular}
+\end{center}
+
+The limit applies whether accelerating or decelerating. If engine damage leaves a ship unable to generate enough energy for the minimum permitted speed, it must use the highest speed its surviving engines can support.
+
+\section{Weapon repair}
+
+During allocation, spend three energy to repair one destroyed lance beam or mass driver. The repaired weapon remains offline for the current turn and may be charged on the next. Missile launchers cannot be repaired.
+
+\section{Fast Turns}
+
+Under the standard rule, a turn rotates a ship 60 degrees in place. With Fast Turns enabled, the ship rotates and then immediately moves one hex forward in its new facing. The destination must be open. This translation counts as the first hex accumulated toward the next turn.
+
+\chapter{Rules Reference}
+
+\section{Activity segment}
+
+\begin{center}
+\begin{tabularx}{\linewidth}{c l Y}\toprule
+Step & Phase & Resolve\\\midrule
+1 & Movement & Draw one card; move every listed-speed ship separately, slowest first; then move existing missiles two hexes.\\
+2 & Launch & Launch new missiles into their launching ships' hexes. They do not move this impulse.\\
+3 & Fire & Fire charged lance beams and mass drivers at legal ships or hostile missiles.\\\bottomrule
+\end{tabularx}
+\end{center}
+
+\section{Key limits}
+
+\begin{tabularx}{\linewidth}{l Y}\toprule
+Rule & Limit\\\midrule
+Ship speed & 0--12. One energy per point.\\
+Missile speed & Two hexes every impulse after the launch impulse.\\
+Side-slip & Never twice consecutively; counts toward turn mode.\\
+Special maneuver & Once per game for each small or medium ship.\\
+Shield reinforcement & Per bank: small 1, medium 2, large 3. Cannot reinforce a collapsed bank.\\
+Shield repair & Two energy; restore one chosen box at end of turn, including a collapsed bank.\\
+Direct fire & Each charged weapon may fire once per turn.\\
+Anti-missile fire & $-1$ to the die roll; any successful hit destroys the missile.\\
+Map edge & A ship leaving the battlefield is destroyed.\\\bottomrule
+\end{tabularx}
+
+\section{Damage sequence}
+
+\begin{enumerate}
+  \item reinforcement on the struck shield;
+  \item permanent boxes on the struck shield;
+  \item one internal-damage roll per remaining point: 1--3 hull, 4--5 engine, 6 weapon;
+  \item destroy the ship immediately if no hull remains.
+\end{enumerate}
+
+\section{Original rules reconciliation}
+
+This edition preserves the 2014 game's core rules while incorporating approved prototype clarifications: fleets may contain up to three ships; deployment is 10--15 hexes apart; launched missiles first move on the following impulse; direct fire suffers a $-1$ penalty against missiles; collapsed shields may be repaired but not reinforced; and Fast Turns is available as a third optional rule.

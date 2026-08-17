@@ -10,6 +10,8 @@ class MatchesControllerTest < ActionDispatch::IntegrationTest
     assert_select "button[data-open-dialog='new-game-dialog']", text: "New game"
     assert_select "button[data-open-dialog='load-game-dialog']", text: "Load game"
     assert_select "button[data-open-dialog='ship-catalog-dialog']", text: "View ships"
+    assert_select "a[href='/the-shattered-reach-rulebook.pdf']", text: "Read rulebook"
+    assert_equal "%PDF", Rails.root.join("public/the-shattered-reach-rulebook.pdf").binread(4)
     assert_select "a[href='/the-shattered-reach-ship-cards.pdf']", text: "Print ship cards"
     assert_equal "%PDF", Rails.root.join("public/the-shattered-reach-ship-cards.pdf").binread(4)
     assert_select "dialog#new-game-dialog [data-setup-step='1']"

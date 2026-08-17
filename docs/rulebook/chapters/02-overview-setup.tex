@@ -1,0 +1,51 @@
+\chapter{Overview and Setup}
+
+In \game{}, two commanders guide small fleets across a hex map. Every turn, commanders secretly divide reactor output among movement, direct-fire weapons, shield reinforcement, and repairs. A semi-random impulse deck determines when each speed moves. After movement, missiles launch and direct-fire weapons engage.
+
+\section{Ships and ship displays}
+
+Every ship has four kinds of systems:
+
+\begin{description}[style=nextline,leftmargin=0pt]
+  \item[Reactor / engines] Each undamaged engine box provides one energy each turn. Engine damage reduces future available energy.
+  \item[Hull integrity] Hull boxes measure the ship's survival. When every hull box is damaged, the ship is immediately destroyed.
+  \item[Forward and aft shields] Shields absorb incoming damage before internal systems are hit. Their current strength is public information.
+  \item[Weapons] The engineering silhouette shows each weapon's physical mount, firing arc, energy cost, damage boxes, and missile ammunition where applicable.
+\end{description}
+
+Use blue markers for available and allocated energy, yellow markers for intact shield boxes, and red markers for damage when playing on the tabletop. The browser version records these automatically.
+
+\section{Weapons at a glance}
+
+\begin{description}[style=nextline,leftmargin=0pt]
+  \item[Lance beams] Accurate and destructive, but short-ranged and expensive to charge.
+  \item[Mass drivers] Less accurate, but inexpensive to charge and effective at longer range.
+  \item[Seeker missiles] Require no energy and have unlimited pursuit range, but launchers carry limited ammunition. Missile counters move independently on the map.
+\end{description}
+
+\section{Choose a battle}
+
+Each commander selects one to three ships. Ship types may be repeated. For a roughly balanced battle, either use the same number and classes of ships or compare size values:
+
+\begin{center}
+\begin{tabular}{lccc}\toprule
+Hull class & Small & Medium & Large\\\midrule
+Size value & 2 & 3 & 4\\\bottomrule
+\end{tabular}
+\end{center}
+
+The Command AI can match the player's fleet by ship count or by total size value. The original duel format uses one or two ships per side, usually of equal class.
+
+\section{Prepare the battlefield}
+
+\begin{enumerate}
+  \item Choose a flat-top hex map measuring 12 by 12, 15 by 15, or 20 by 20 hexes. A tabletop map should not exceed 20 by 20.
+  \item Place opposing fleets \term{10 to 15 hexes apart}, generally facing one another. Spread multiple ships into nearby unoccupied hexes.
+  \item Fill every forward shield, aft shield, hull, and reactor box shown on each ship display.
+  \item Give every small and medium ship one special-maneuver token. Large ships do not receive one.
+  \item Place the listed ammunition beside each missile launcher. Unless a ship sheet says otherwise, a launcher begins with three missiles.
+  \item Separate the twelve impulse cards into their three phase decks of four cards each. Shuffle each deck independently.
+  \item If using optional rules, agree on them before beginning allocation.
+\end{enumerate}
+
+\important{PUBLIC AND SECRET INFORMATION}{Ship position, facing, speed after announcement, damage, remaining shields, expended missiles, and used special maneuvers are public. Energy allocation remains secret until both sides commit it.}
