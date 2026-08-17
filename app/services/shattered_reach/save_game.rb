@@ -109,7 +109,7 @@ module ShatteredReach
         repair = allocation["shield_repair"]
         allocation["shield_repair"] = if %w[front aft].include?(repair) && ship.dig("shields", repair) < spec.fetch("#{repair}_shields".to_sym)
                                           repair
-                                        end
+                                      end
         ship["damage"] = {
           "engines" => ship.dig("damage", "engines").to_i.clamp(0, spec[:energy]),
           "weapons" => ship.dig("damage", "weapons").to_i.clamp(0, spec[:weapons].length)
@@ -129,7 +129,7 @@ module ShatteredReach
         repairable_weapon_ids = ship["weapons"].select { |weapon| weapon["destroyed"] && weapon["type"] != "missile" }.map { |weapon| weapon["id"] }
         allocation["weapon_repair"] = if state.dig("rules_options", "weapon_repair") && repairable_weapon_ids.include?(allocation["weapon_repair"])
                                          allocation["weapon_repair"]
-                                       end
+                                      end
       end
 
       canonicalize_missiles!(state)

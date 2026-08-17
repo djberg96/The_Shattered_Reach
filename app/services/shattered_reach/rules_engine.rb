@@ -54,7 +54,7 @@ module ShatteredReach
     end
 
     def self.restart(state, seed: state.fetch("seed", 17))
-      current = Marshal.load(Marshal.dump(state))
+      current = state.deep_dup
       normalize!(current)
       fleets = current.fetch("ships").reject { |ship| ship["destroyed"] && ship["key"].blank? }
                       .group_by { |ship| ship.fetch("player") }
@@ -131,7 +131,7 @@ module ShatteredReach
     private_class_method :starting_formations
 
     def self.apply(state, player:, action:, payload: {})
-      state = Marshal.load(Marshal.dump(state))
+      state = state.deep_dup
       normalize!(state)
       return state if state["winner"]
 
