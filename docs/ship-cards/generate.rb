@@ -91,6 +91,7 @@ module ShipCards
       \\ReactorTrack{#{ship[:energy]}}
       \\WeaponHeader
       #{weapon_commands(ship)}
+      \\ShipBlurb{#{tex(ship[:blurb])}}
       \\TurnStrip{#{turns[0]}}{#{turns[1]}}{#{turns[2]}}{#{ship[:size] == 'large' ? 'CAPITAL HULL' : 'SPECIAL MANEUVER $\\square$'}}
       \\end{shipcard}
     TEX

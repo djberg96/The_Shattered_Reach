@@ -3,6 +3,16 @@
 require "test_helper"
 
 class ShatteredReach::GameDefinitionTest < ActiveSupport::TestCase
+  test "setting and every ship provide player-facing lore" do
+    assert_equal 3, ShatteredReach::GameDefinition::SETTING.fetch(:paragraphs).length
+    assert ShatteredReach::GameDefinition::SETTING.fetch(:paragraphs).all? { |paragraph| paragraph.length > 100 }
+
+    blurbs = ShatteredReach::GameDefinition::SHIPS.values.map { |ship| ship.fetch(:blurb) }
+    assert_equal 9, blurbs.length
+    assert_equal 9, blurbs.uniq.length
+    assert blurbs.all? { |blurb| blurb.length.between?(70, 120) }
+  end
+
   ORIGINAL_IMPULSE_CARDS = [
     [[5, 7, 9, 10, 11, 12], [2, 6, 8, 10, 12], [4, 6, 8, 9, 11, 12], [3, 7, 9, 10, 11, 12]],
     [[3, 5, 7, 9, 10, 11, 12], [4, 6, 8, 9, 10, 11, 12], [4, 6, 7, 8, 9, 10, 12], [1, 5, 7, 8, 10, 11, 12]],

@@ -2,18 +2,6 @@
 <% ship_options = ShatteredReach::GameDefinition::SHIPS.map { |key, ship| ["#{ShatteredReach::GameDefinition::FLEETS.fetch(ship[:fleet])[:name]} · #{ship[:name].delete_prefix("#{ShatteredReach::GameDefinition::FLEETS.fetch(ship[:fleet])[:name].split.first} ")} · #{ship[:size].capitalize}", key] } %>
 <% optional_ship_options = [["No ship", ""]] + ship_options %>
 <% ship_turn_modes = { "small" => [0, 1, 2], "medium" => [1, 2, 3], "large" => [2, 3, 4] } %>
-<% ship_doctrines = {
-  "aurelian_frigate" => "A fast beam escort built to rake either flank while its forward driver opens the engagement.",
-  "aurelian_cruiser" => "A balanced line cruiser whose paired beam batteries and omnidirectional driver reward disciplined positioning.",
-  "aurelian_battleship" => "The Compact’s radiant capital ship: a broad beam arsenal wrapped around a heavily shielded command hull.",
-  "veyr_frigate" => "A lean missile hunter with an aft-capable beam battery and enough speed to dictate contact.",
-  "veyr_cruiser" => "A flexible strike cruiser combining paired beam broadsides, a forward driver, and a seeker rack.",
-  "veyr_battleship" => "A severe long-range weapons platform centered on twin mass drivers and a deep missile magazine.",
-  "kestrel_frigate" => "A compact freeholder raider that trades hull mass for forward beams and twin seeker launchers.",
-  "kestrel_cruiser" => "A stubborn missile carrier with strong shields, high reactor output, and layered seeker coverage.",
-  "kestrel_battleship" => "The Freeholds’ improvised leviathan, carrying three beam batteries and a formidable missile broadside."
-} %>
-
 <main class="landing" data-landing>
   <% if notice.present? || alert.present? %><div class="flash-message <%= alert.present? ? "error" : "success" %>" role="status"><%= alert || notice %></div><% end %>
   <section class="hero">
@@ -215,7 +203,7 @@
                 <div>
                   <p class="eyebrow"><%= fleet[:name] %> · <%= ship[:size] %> hull</p>
                   <h3><%= ship[:name] %></h3>
-                  <p><%= ship_doctrines.fetch(key) %></p>
+                  <p data-ship-lore><%= ship[:blurb] %></p>
                 </div>
                 <dl class="catalog-stat-grid">
                   <div><dt>Hull</dt><dd><%= ship[:hull] %></dd></div>
@@ -280,10 +268,20 @@
     </div>
   </dialog>
 
+  <section class="setting-intro" aria-labelledby="setting-title">
+    <div class="setting-heading">
+      <p class="eyebrow"><%= ShatteredReach::GameDefinition::SETTING[:kicker] %></p>
+      <h2 id="setting-title"><%= ShatteredReach::GameDefinition::SETTING[:title] %></h2>
+    </div>
+    <div class="setting-copy">
+      <% ShatteredReach::GameDefinition::SETTING[:paragraphs].each do |paragraph| %><p><%= paragraph %></p><% end %>
+    </div>
+  </section>
+
   <section class="fleet-intro">
     <div><p class="eyebrow">Three powers. One frontier.</p><h2>Choose your doctrine.</h2></div>
-    <article class="fleet-card aurelian" style="background-image: linear-gradient(0deg, rgba(11,16,39,.96), rgba(11,16,39,.1)), url('<%= asset_path("shattered_reach/aurelian-lineup.png") %>')"><h3>Aurelian Compact</h3><p>Elegant beam craft and composed formation fighting.</p></article>
-    <article class="fleet-card veyr" style="background-image: linear-gradient(0deg, rgba(11,16,39,.96), rgba(11,16,39,.1)), url('<%= asset_path("shattered_reach/veyr-lineup.png") %>')"><h3>Veyr Dominion</h3><p>Relentless mass drivers and long-reaching missiles.</p></article>
-    <article class="fleet-card kestrel" style="background-image: linear-gradient(0deg, rgba(11,16,39,.96), rgba(11,16,39,.1)), url('<%= asset_path("shattered_reach/kestrel-lineup.png") %>')"><h3>Kestrel Freeholds</h3><p>Hardy industrial warships with flexible loadouts.</p></article>
+    <% ShatteredReach::GameDefinition::FLEETS.each do |key, fleet| %>
+      <article class="fleet-card <%= key %>" style="background-image: linear-gradient(0deg, rgba(11,16,39,.96), rgba(11,16,39,.1)), url('<%= asset_path("shattered_reach/#{key}-lineup.png") %>')"><h3><%= fleet[:name] %></h3><p><%= fleet[:description] %></p></article>
+    <% end %>
   </section>
 </main>

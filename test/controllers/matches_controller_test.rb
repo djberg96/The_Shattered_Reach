@@ -23,6 +23,8 @@ class MatchesControllerTest < ActionDispatch::IntegrationTest
     assert_select "dialog#ship-catalog-dialog [data-catalog-ship]", count: 9
     assert_select "dialog#ship-catalog-dialog [data-catalog-panel]", count: 9
     assert_select "dialog#ship-catalog-dialog [data-catalog-panel]:not([hidden])", count: 1
+    assert_select ".setting-intro #setting-title", text: "The lanes are opening again."
+    assert_select "[data-ship-lore]", count: 9
   end
 
   test "a hot-seat skirmish accepts duplicate three-ship fleets" do
