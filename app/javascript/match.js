@@ -453,7 +453,7 @@ export function mountMatch(root) {
     const ships = state.ships.filter((ship) => ship.player === player && !ship.destroyed);
     const selectablePhase = state.phase === "allocation" || ["launch", "fire"].includes(state.activity_step);
     if (ships.length < 2 || !selectablePhase) return "";
-    return `<nav class="command-ship-picker" aria-label="Choose ship to command">${ships.map((ship) => { const draft = allocationDrafts.get(ship.id); return `<button class="${ship.id === current?.id ? "active" : ""}" data-command-ship-id="${ship.id}"><span>Ship ${ship.fleet_index || 1}</span><b>${ship.name}</b><small>${state.phase === "allocation" ? ship.locked ? "Fleet committed" : draft ? `Draft · speed ${draft.speed}` : ship.allocation_set ? `Plan saved · speed ${ship.allocation.speed}` : "No plan" : `Speed ${ship.allocation.speed}`}</small></button>`; }).join("")}</nav>`;
+    return `<nav class="command-ship-picker" aria-label="Choose ship to command">${ships.map((ship) => { const draft = allocationDrafts.get(ship.id); const active = ship.id === current?.id; return `<button type="button" class="${active ? "active" : ""}" data-command-ship-id="${ship.id}" aria-pressed="${active}"><span>Ship ${ship.fleet_index || 1}<em>${active ? "Active" : "Select"}</em></span><b>${ship.name}</b><small>${state.phase === "allocation" ? ship.locked ? "Fleet committed" : draft ? `Draft · speed ${draft.speed}` : ship.allocation_set ? `Plan saved · speed ${ship.allocation.speed}` : "No plan" : `Speed ${ship.allocation.speed}`}</small></button>`; }).join("")}</nav>`;
   };
   const movementIdentity = (movingShip) => {
     const eligible = state.ships
