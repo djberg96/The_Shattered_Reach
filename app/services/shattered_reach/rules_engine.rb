@@ -324,7 +324,7 @@ module ShatteredReach
       movers = state["ships"].reject { |ship| ship["destroyed"] || !card.include?(ship.dig("allocation", "speed")) }
       state["pending_movement"] = movers.sort_by do |ship|
         initiative_order = ship["player"] == state["initiative"] ? 0 : 1
-        [ship.dig("allocation", "speed"), initiative_order]
+        [ship.dig("allocation", "speed"), initiative_order, ship["fleet_index"].to_i, ship["id"]]
       end.map { |ship| ship["id"] }
       state["activity_step"] = "movement"
       state["movement_stage"] = state["pending_movement"].any? ? "before" : nil

@@ -469,6 +469,7 @@ class ShatteredReach::RulesEngineTest < ActiveSupport::TestCase
 
     card_index = ShatteredReach::GameDefinition::IMPULSE_DECKS.first.index { |card| card.include?(6) }
     state["impulse_order"][0][0] = card_index
+    state["ships"].reverse!
     state = ShatteredReach::RulesEngine.apply(state, player: "player_one", action: "advance_impulse")
 
     assert_equal human_ships.map { |ship| ship["id"] }, state["pending_movement"]
