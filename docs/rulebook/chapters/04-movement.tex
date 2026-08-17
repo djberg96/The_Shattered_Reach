@@ -14,14 +14,72 @@ When a ship's speed appears on the impulse card, choose one legal action:
 \end{itemize}
 
 \begin{center}
-\begin{tikzpicture}[scale=.72,>=Latex]
-  \foreach \a in {0,60,...,300} {\node[regular polygon,regular polygon sides=6,minimum size=1.18in,draw=reachline,rotate=30] at (\a:1.08in) {};}
-  \node[regular polygon,regular polygon sides=6,minimum size=1.18in,draw=reachgold,line width=1.2pt,rotate=30] (c) at (0,0) {};
-  \draw[->,line width=2pt,reachgold] (0,0) -- (0,1.0in) node[midway,right] {forward};
-  \draw[->,line width=1.6pt,reachblue] (0,0) -- (-.90in,.54in) node[midway,above left] {port slip};
-  \draw[->,line width=1.6pt,reachblue] (0,0) -- (.90in,.54in) node[midway,above right] {starboard slip};
-  \draw[->,line width=1.3pt,reachcopper] (-.26in,-.12in) arc[start angle=220,end angle=55,radius=.34in];
-  \node[below=6pt of c] {ship facing upward};
+\begin{tikzpicture}[
+  scale=.78,
+  >=Latex
+]
+  % Flat-top hexes meet across their edges. Their neighboring centers lie at
+  % 30, 90, 150, 210, 270, and 330 degrees---not at the vertices.
+  \coordinate (forward) at (0,1.022in);
+  \coordinate (port) at (-.885in,.511in);
+  \coordinate (starboard) at (.885in,.511in);
+  \coordinate (west) at (-.885in,-.511in);
+  \coordinate (aft) at (0,-1.022in);
+  \coordinate (east) at (.885in,-.511in);
+
+  % Draw exact .59-inch-radius hexes so neighboring cells share an edge
+  % without the hidden padding introduced by TikZ polygon nodes.
+  \foreach \cell in {west,aft,east} {
+    \begin{scope}[shift={(\cell)}]
+      \draw[reachline]
+        (.59in,0) -- (.295in,.511in) -- (-.295in,.511in) --
+        (-.59in,0) -- (-.295in,-.511in) -- (.295in,-.511in) -- cycle;
+    \end{scope}
+  }
+  \begin{scope}[shift={(forward)}]
+    \draw[reachgold,fill=reachgold!10]
+      (.59in,0) -- (.295in,.511in) -- (-.295in,.511in) --
+      (-.59in,0) -- (-.295in,-.511in) -- (.295in,-.511in) -- cycle;
+  \end{scope}
+  \foreach \cell in {port,starboard} {
+    \begin{scope}[shift={(\cell)}]
+      \draw[reachblue,fill=reachblue!8]
+        (.59in,0) -- (.295in,.511in) -- (-.295in,.511in) --
+        (-.59in,0) -- (-.295in,-.511in) -- (.295in,-.511in) -- cycle;
+    \end{scope}
+  }
+  \draw[reachgold,line width=1.2pt,fill=reachgold!5]
+    (.59in,0) -- (.295in,.511in) -- (-.295in,.511in) --
+    (-.59in,0) -- (-.295in,-.511in) -- (.295in,-.511in) -- cycle;
+
+  \draw[->,line width=2pt,reachgold] (0,.18in) -- ($(forward)+(0,-.18in)$);
+  \draw[->,densely dashed,line width=1.6pt,reachblue] (-.13in,.08in) -- ($(port)+(.16in,-.09in)$);
+  \draw[->,densely dashed,line width=1.6pt,reachblue] (.13in,.08in) -- ($(starboard)+(-.16in,-.09in)$);
+
+  \node[font=\sffamily\small\bfseries,text=reachgold,align=center] at ($(forward)+(0,.18in)$) {FORWARD};
+  \node[font=\sffamily\scriptsize\bfseries,text=reachblue,align=center,text width=.82in]
+    at ($(port)+(0,.19in)$) {PORT\\SLIP};
+  \node[font=\sffamily\scriptsize\bfseries,text=reachblue,align=center,text width=.82in]
+    at ($(starboard)+(0,.19in)$) {STARBOARD\\SLIP};
+
+  % The side-slip destinations retain the ship's original north-facing heading.
+  % The forward movement arrow already communicates that heading on its own.
+  \foreach \cell in {port,starboard} {
+    \draw[->,line width=.9pt,reachsteel]
+      ($(\cell)+(0,-.34in)$) -- ($(\cell)+(0,-.17in)$);
+  }
+
+  \node[inner sep=0pt] at (0,.03in) {\includegraphics[width=.64in]{../../app/assets/images/ships/tactical/aurelian_frigate.png}};
+  \draw[->,line width=1.3pt,reachcopper]
+    ($(0,.08in)+(90:.35in)$) arc[start angle=90,end angle=150,radius=.35in];
+  \draw[->,line width=1.3pt,reachcopper]
+    ($(0,.08in)+(90:.35in)$) arc[start angle=90,end angle=30,radius=.35in];
+  \node[font=\sffamily\scriptsize\bfseries,text=reachcopper,align=center]
+    at (0,-.42in) {TURN 60\textdegree};
+  \node[font=\sffamily\scriptsize,text=reachblue,align=center] at (0,-1.78in)
+    {DASHED ARROW: move to another hex; keep facing north};
+  \node[font=\sffamily\scriptsize,text=reachcopper,align=center] at (0,-1.98in)
+    {CURVED ARROW: remain in the hex; rotate 60\textdegree};
 \end{tikzpicture}
 \end{center}
 
