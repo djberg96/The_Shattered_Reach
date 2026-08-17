@@ -57,12 +57,47 @@ Each arc begins in the three adjacent hexes and extends outward indefinitely. Ar
 
 \begin{center}
 \begin{tikzpicture}[scale=.76]
-  \foreach \a/\label/\fillcolor in {90/F/reachgold,150/L/reachblue,210/L/reachblue,270/A/reachcopper,330/R/reachsteel,30/R/reachsteel} {
-    \node[regular polygon,regular polygon sides=6,minimum size=1.0in,draw=white,fill=\fillcolor!32,rotate=30] at (\a:0.94in) {\sffamily\bfseries\label};
+  \coordinate (forward) at (0,1.022in);
+  \coordinate (forwardport) at (-.885in,.511in);
+  \coordinate (forwardstarboard) at (.885in,.511in);
+  \coordinate (aftport) at (-.885in,-.511in);
+  \coordinate (aft) at (0,-1.022in);
+  \coordinate (aftstarboard) at (.885in,-.511in);
+  \colorlet{forwardportarc}{reachgold!50!reachblue}
+  \colorlet{forwardstarboardarc}{reachgold!50!reachsteel}
+  \colorlet{aftportarc}{reachblue!50!reachcopper}
+  \colorlet{aftstarboardarc}{reachsteel!50!reachcopper}
+
+  % Use the same exact flat-top geometry as the tactical map. Mixed colors on
+  % the diagonal hexes reinforce that boundary directions belong to two arcs.
+  \foreach \cell/\arcfill in {
+    forward/reachgold,
+    forwardport/forwardportarc,
+    forwardstarboard/forwardstarboardarc,
+    aftport/aftportarc,
+    aft/reachcopper,
+    aftstarboard/aftstarboardarc} {
+    \begin{scope}[shift={(\cell)}]
+      \draw[draw=\arcfill,line width=1pt,fill=\arcfill!18]
+        (.59in,0) -- (.295in,.511in) -- (-.295in,.511in) --
+        (-.59in,0) -- (-.295in,-.511in) -- (.295in,-.511in) -- cycle;
+    \end{scope}
   }
-  \node[regular polygon,regular polygon sides=6,minimum size=1.0in,draw=reachgold,line width=1.4pt,fill=reachvoid,rotate=30,text=white] at (0,0) {SHIP};
-  \draw[->,reachgold,line width=1.2pt] (0,.2in)--(0,.66in);
-  \node[align=center] at (0,-1.7in) {Adjacent arc reference; each arc continues outward.\\Boundary directions belong to both neighboring arcs.};
+
+  \node[font=\sffamily\large\bfseries,text=reachvoid] at (forward) {F};
+  \node[font=\sffamily\large\bfseries,text=reachvoid] at (forwardport) {F/L};
+  \node[font=\sffamily\large\bfseries,text=reachvoid] at (forwardstarboard) {F/R};
+  \node[font=\sffamily\large\bfseries,text=reachvoid] at (aftport) {A/L};
+  \node[font=\sffamily\large\bfseries,text=reachvoid] at (aft) {A};
+  \node[font=\sffamily\large\bfseries,text=reachvoid] at (aftstarboard) {A/R};
+
+  \draw[reachgold,line width=1.4pt,fill=reachvoid]
+    (.59in,0) -- (.295in,.511in) -- (-.295in,.511in) --
+    (-.59in,0) -- (-.295in,-.511in) -- (.295in,-.511in) -- cycle;
+  \node[inner sep=0pt] at (0,0) {\includegraphics[width=.66in]{../../app/assets/images/ships/tactical/aurelian_frigate.png}};
+  \draw[->,reachgold,line width=1.2pt] (0,.30in)--(0,.72in);
+
+  \node[align=center] at (0,-1.78in) {Adjacent arc reference; the frigate's bow points north.\\Each labeled direction continues outward from the ship.};
 \end{tikzpicture}
 \end{center}
 
