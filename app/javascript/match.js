@@ -25,6 +25,7 @@ export function mountMatch(root) {
   let requestInFlight = false;
   let combatEffectPlaying = false;
   let combatResolutionPending = false;
+  const allocationDrafts = new Map();
   const combatEffectQueue = [];
   let pendingMissileMovements = [];
   const deferredCombatEvents = [];
@@ -245,10 +246,12 @@ export function mountMatch(root) {
     const [q, r, facing] = ship.position; const [x, y] = center(q, r);
     const selectable = !state.solo || ship.player === player;
     const moving = state.pending_movement?.[0] === ship.id;
+    const numberedFleet = state.ships.filter((candidate) => candidate.player === ship.player && !candidate.destroyed).length > 1;
     const target = targetStatus(ship);
     const art = tacticalArt[ship.key];
     const visual = art ? `<image class="ship-art" href="${art}" x="-44" y="-44" width="88" height="88" preserveAspectRatio="xMidYMid meet"/>` : shipHull(ship);
-    return `<g class="ship-token fleet-${ship.fleet} ${ship.destroyed ? "destroyed" : ""} ${moving ? "movement-active" : ""} ${target ? `target-candidate ${target}` : selectable ? "selectable" : "ai-opponent"}" data-ship-hover-id="${ship.id}" ${target ? `data-target-id="${ship.id}" role="button" tabindex="0" aria-label="${ship.name}, ${target} target"` : selectable ? `data-ship-id="${ship.id}" role="button" tabindex="0" aria-label="Open ${ship.name} schematic"` : `aria-label="${ship.name}, AI-controlled opponent"`} transform="translate(${x} ${y}) rotate(${120 - (facing * 60)}) scale(.86)"><circle class="ship-target-outline" r="36"/><circle class="ship-hover-area" r="36"/>${visual}</g>`;
+    const movementMarker = moving && numberedFleet ? `<g class="movement-ship-marker" transform="translate(${x + 27} ${y - 29})" aria-hidden="true"><circle r="10"/><text y="3.5">${ship.fleet_index || 1}</text></g>` : "";
+    return `<g class="ship-token fleet-${ship.fleet} ${ship.destroyed ? "destroyed" : ""} ${moving ? "movement-active" : ""} ${target ? `target-candidate ${target}` : selectable ? "selectable" : "ai-opponent"}" data-ship-hover-id="${ship.id}" ${target ? `data-target-id="${ship.id}" role="button" tabindex="0" aria-label="${ship.name}, ${target} target"` : selectable ? `data-ship-id="${ship.id}" role="button" tabindex="0" aria-label="Open ${ship.name} schematic"` : `aria-label="${ship.name}, AI-controlled opponent"`} transform="translate(${x} ${y}) rotate(${120 - (facing * 60)}) scale(.86)"><circle class="ship-target-outline" r="36"/><circle class="ship-hover-area" r="36"/>${visual}</g>${movementMarker}`;
   };
   const missileSplay = (missile, missiles = state.missiles || []) => {
     const companions = missiles.filter((candidate) => candidate.position[0] === missile.position[0] && candidate.position[1] === missile.position[1]);
@@ -440,9 +443,9 @@ export function mountMatch(root) {
       return `<g class="movement-choice" data-maneuver="${maneuver}" role="button" tabindex="0" aria-label="${label} to hex ${hexReference(destination)}"><polygon points="${polygon(x, y, hexSize - 3)}"/><text x="${x}" y="${y - 2}">${label}</text><text class="destination-reference" x="${x}" y="${y + 10}">${hexReference(destination)}</text></g>`;
     }).join("");
   };
-  const weaponChoices = (ship) => ship.weapons.filter((weapon) => weapon.type !== "missile" && !weapon.destroyed).map((weapon) => `
+  const weaponChoices = (ship, allocation = ship.allocation) => ship.weapons.filter((weapon) => weapon.type !== "missile" && !weapon.destroyed).map((weapon) => `
     <label class="weapon-allocation">
-      <input type="checkbox" value="${weapon.id}" data-energy="${weaponEnergy(weapon)}" ${ship.allocation.weapons.includes(weapon.id) ? "checked" : ""}>
+      <input type="checkbox" value="${weapon.id}" data-energy="${weaponEnergy(weapon)}" ${allocation.weapons.includes(weapon.id) ? "checked" : ""}>
       <span><b>${weapon.mount || weaponName(weapon)}</b>${weaponName(weapon)} · Arc ${weapon.arc.join("/")}</span>
       <em>${weaponEnergy(weapon)}E</em>
     </label>`).join("");
@@ -450,7 +453,20 @@ export function mountMatch(root) {
     const ships = state.ships.filter((ship) => ship.player === player && !ship.destroyed);
     const selectablePhase = state.phase === "allocation" || ["launch", "fire"].includes(state.activity_step);
     if (ships.length < 2 || !selectablePhase) return "";
-    return `<nav class="command-ship-picker" aria-label="Choose ship to command">${ships.map((ship) => `<button class="${ship.id === current?.id ? "active" : ""}" data-command-ship-id="${ship.id}"><span>Ship ${ship.fleet_index || 1}</span><b>${ship.name}</b><small>${state.phase === "allocation" ? ship.locked ? "Fleet committed" : ship.allocation_set ? `Plan saved · speed ${ship.allocation.speed}` : "No plan" : `Speed ${ship.allocation.speed}`}</small></button>`).join("")}</nav>`;
+    return `<nav class="command-ship-picker" aria-label="Choose ship to command">${ships.map((ship) => { const draft = allocationDrafts.get(ship.id); return `<button class="${ship.id === current?.id ? "active" : ""}" data-command-ship-id="${ship.id}"><span>Ship ${ship.fleet_index || 1}</span><b>${ship.name}</b><small>${state.phase === "allocation" ? ship.locked ? "Fleet committed" : draft ? `Draft · speed ${draft.speed}` : ship.allocation_set ? `Plan saved · speed ${ship.allocation.speed}` : "No plan" : `Speed ${ship.allocation.speed}`}</small></button>`; }).join("")}</nav>`;
+  };
+  const movementIdentity = (movingShip) => {
+    const eligible = state.ships
+      .filter((candidate) => candidate.player === movingShip.player && !candidate.destroyed && (state.impulse_card || []).includes(Number(candidate.allocation.speed)))
+      .sort((left, right) => Number(left.allocation.speed) - Number(right.allocation.speed) || Number(left.fleet_index) - Number(right.fleet_index));
+    const position = Math.max(eligible.findIndex((candidate) => candidate.id === movingShip.id), 0) + 1;
+    return {
+      label: eligible.length > 1 ? `Ship ${movingShip.fleet_index || position} · ${movingShip.name}` : movingShip.name,
+      sequence: eligible.length > 1 ? `Movement ${position} of ${eligible.length}` : "",
+      multiple: eligible.length > 1,
+      position,
+      total: eligible.length
+    };
   };
   const specialManeuverControls = (ship, timing, active = false) => ship.special_available ? `<section class="special-maneuvers"><label class="special-maneuver-toggle"><input class="special-maneuver-toggle-input" type="checkbox" aria-controls="special-maneuver-menu" ${active ? "checked" : ""}><span>Use special maneuver token</span><small>Optional · ${timing} movement</small></label><div id="special-maneuver-menu" class="special-maneuver-menu" ${active ? "" : "hidden"}><button class="secondary special" data-special="emergency_power">Emergency power <small>Extra forward move</small></button><button class="secondary special" data-special="quick_stop">Quick stop <small>Speed becomes zero</small></button><label>Bootlegger heading<select id="bootlegger-facing">${["Southeast", "Northeast", "North", "Northwest", "Southwest", "South"].map((label, direction) => `<option value="${direction}" ${ship.position[2] === direction ? "selected" : ""}>${label}</option>`).join("")}</select><button class="secondary bootlegger">Execute bootlegger <small>Rotate freely</small></button></label></div></section>` : "";
   const controls = (ship, target) => {
@@ -458,12 +474,14 @@ export function mountMatch(root) {
     if (combatResolutionPending) return `<div class="control-stack">${activityStrip()}<p class="step-callout combat-resolution"><b>Resolving weapons fire</b>Firing effects and damage reports must finish before command advances.</p><button class="primary" disabled>Combat in progress</button></div>`;
     if (state.winner) return `<div class="control-stack">${undoMovement}<a class="button" href="/">Return to fleet selection</a></div>`;
     if (state.phase === "allocation") {
+      const draft = allocationDrafts.get(ship.id);
+      const allocation = draft ? { speed: Number(draft.speed), shields: { front: Number(draft.front_shields), aft: Number(draft.aft_shields) }, shield_repair: draft.shield_repair, weapon_repair: draft.weapon_repair, weapons: draft.weapons } : ship.allocation;
       const shieldCap = ship.size === "small" ? 1 : ship.size === "medium" ? 2 : 3;
       const accelerationLimit = { small: 5, medium: 4, large: 3 }[ship.size];
       const accelerationLimited = state.rules_options?.acceleration_limits && state.turn > 1 && ship.previous_speed != null;
       const minimumSpeed = accelerationLimited ? Math.min(Math.max(0, ship.previous_speed - accelerationLimit), ship.energy - ship.damage.engines) : 0;
       const maximumSpeed = accelerationLimited ? Math.min(12, ship.previous_speed + accelerationLimit, ship.energy - ship.damage.engines) : 12;
-      const allocationSpeed = Math.min(maximumSpeed, Math.max(minimumSpeed, ship.allocation.speed));
+      const allocationSpeed = Math.min(maximumSpeed, Math.max(minimumSpeed, allocation.speed));
       const frontDamaged = ship.shields.front < ship.max_front_shields;
       const aftDamaged = ship.shields.aft < ship.max_aft_shields;
       const repairableWeapons = ship.weapons.filter((weapon) => weapon.destroyed && weapon.type !== "missile");
@@ -471,21 +489,24 @@ export function mountMatch(root) {
       const singleShipFleet = fleetShips.length === 1;
       const plansSaved = fleetShips.filter((entry) => entry.allocation_set).length;
       const fleetReady = plansSaved === fleetShips.length;
-      const shieldRepair = frontDamaged || aftDamaged ? `<fieldset class="shield-repair-list"><legend>Shield repair · 2 energy</legend><label>Restore at end of turn<select id="shield-repair"><option value="">No repair</option><option value="front" ${ship.allocation.shield_repair === "front" ? "selected" : ""} ${frontDamaged ? "" : "disabled"}>Forward · ${ship.shields.front}/${ship.max_front_shields}</option><option value="aft" ${ship.allocation.shield_repair === "aft" ? "selected" : ""} ${aftDamaged ? "" : "disabled"}>Aft · ${ship.shields.aft}/${ship.max_aft_shields}</option></select></label></fieldset>` : "";
-      const weaponRepair = state.rules_options?.weapon_repair && repairableWeapons.length ? `<fieldset class="weapon-repair-list"><legend>Weapon repair · 3 energy</legend><label>Restore for next turn<select id="weapon-repair"><option value="">No repair</option>${repairableWeapons.map((weapon) => `<option value="${weapon.id}" ${ship.allocation.weapon_repair === weapon.id ? "selected" : ""}>${weapon.mount || weaponName(weapon)} · ${weaponName(weapon)}</option>`).join("")}</select></label><small>Beam and mass driver weapons only. A repaired weapon remains offline this turn.</small></fieldset>` : "";
+      const shieldRepair = frontDamaged || aftDamaged ? `<fieldset class="shield-repair-list"><legend>Shield repair · 2 energy</legend><label>Restore at end of turn<select id="shield-repair"><option value="">No repair</option><option value="front" ${allocation.shield_repair === "front" ? "selected" : ""} ${frontDamaged ? "" : "disabled"}>Forward · ${ship.shields.front}/${ship.max_front_shields}</option><option value="aft" ${allocation.shield_repair === "aft" ? "selected" : ""} ${aftDamaged ? "" : "disabled"}>Aft · ${ship.shields.aft}/${ship.max_aft_shields}</option></select></label></fieldset>` : "";
+      const weaponRepair = state.rules_options?.weapon_repair && repairableWeapons.length ? `<fieldset class="weapon-repair-list"><legend>Weapon repair · 3 energy</legend><label>Restore for next turn<select id="weapon-repair"><option value="">No repair</option>${repairableWeapons.map((weapon) => `<option value="${weapon.id}" ${allocation.weapon_repair === weapon.id ? "selected" : ""}>${weapon.mount || weaponName(weapon)} · ${weaponName(weapon)}</option>`).join("")}</select></label><small>Beam and mass driver weapons only. A repaired weapon remains offline this turn.</small></fieldset>` : "";
       const speedLimit = accelerationLimited ? `<small class="speed-limit-note">Previous speed ${ship.previous_speed} · allowed ${minimumSpeed}–${maximumSpeed}</small>` : "";
       const allocationActions = singleShipFleet ? `<button class="primary commit-allocation allocation-tip" aria-describedby="commit-allocation-tip">Commit Allocation<span id="commit-allocation-tip" role="tooltip">Save and lock this ship's energy plan for the turn${state.solo ? "; the AI then commits its plan" : ""}.</span></button>` : `<div class="allocation-readiness"><span>Fleet plans</span><b><span class="plans-saved-count">${plansSaved}</span> / ${fleetShips.length} saved</b></div><button class="secondary save-allocation allocation-tip" aria-describedby="save-allocation-tip">Save Ship Plan<span id="save-allocation-tip" role="tooltip">Save this ship's current plan. You can revise and save it again until the fleet is committed.</span></button><button class="primary commit-fleet allocation-tip" aria-describedby="commit-fleet-tip" ${fleetReady ? "" : "disabled"}>Commit Fleet<span id="commit-fleet-tip" role="tooltip">${fleetReady ? `Lock every saved ship plan for this turn${state.solo ? "; the AI then commits its plans" : ""}.` : "Save a plan for every surviving ship before committing the fleet."}</span></button>`;
       if (fleetShips.every((entry) => entry.locked)) return `<div class="control-stack"><p class="step-callout allocation-committed"><b>Fleet committed</b>Your plans are locked for this turn. ${state.solo ? "Command AI is completing its allocation." : "Waiting for the opposing fleet."}</p></div>`;
-      return `<div class="control-stack"><label>Speed <output id="speed-value">${allocationSpeed}</output><input id="speed" type="range" min="${minimumSpeed}" max="${maximumSpeed}" value="${allocationSpeed}">${speedLimit}</label><fieldset class="shield-allocation-list"><legend>Shield reinforcement</legend><label>Forward <output id="front-shields-value">${ship.allocation.shields.front}</output><input id="front-shields" type="range" min="0" max="${ship.shields.front > 0 ? shieldCap : 0}" value="${ship.allocation.shields.front}"></label><label>Aft <output id="aft-shields-value">${ship.allocation.shields.aft}</output><input id="aft-shields" type="range" min="0" max="${ship.shields.aft > 0 ? shieldCap : 0}" value="${ship.allocation.shields.aft}"></label></fieldset>${shieldRepair}${weaponRepair}<fieldset class="weapon-allocation-list"><legend>Weapon circuits</legend>${weaponChoices(ship)}</fieldset><div class="allocation-budget"><span>Energy committed</span><b><output id="energy-used">0</output> / ${ship.energy - ship.damage.engines}</b></div>${allocationActions}</div>`;
+      return `<div class="control-stack"><label>Speed <output id="speed-value">${allocationSpeed}</output><input id="speed" type="range" min="${minimumSpeed}" max="${maximumSpeed}" value="${allocationSpeed}">${speedLimit}</label><fieldset class="shield-allocation-list"><legend>Shield reinforcement</legend><label>Forward <output id="front-shields-value">${allocation.shields.front}</output><input id="front-shields" type="range" min="0" max="${ship.shields.front > 0 ? shieldCap : 0}" value="${allocation.shields.front}"></label><label>Aft <output id="aft-shields-value">${allocation.shields.aft}</output><input id="aft-shields" type="range" min="0" max="${ship.shields.aft > 0 ? shieldCap : 0}" value="${allocation.shields.aft}"></label></fieldset>${shieldRepair}${weaponRepair}<fieldset class="weapon-allocation-list"><legend>Weapon circuits</legend>${weaponChoices(ship, allocation)}</fieldset><div class="allocation-budget"><span>Energy committed</span><b><output id="energy-used">0</output> / ${ship.energy - ship.damage.engines}</b></div>${allocationActions}</div>`;
     }
     if (state.activity_step === "draw") return `<div class="control-stack">${activityStrip()}<p class="step-help">Draw the next card to discover which speeds receive a movement opportunity.</p><button class="primary advance">${state.impulse === 0 ? "Draw first impulse" : state.impulse === 11 ? "Draw the last impulse" : "Draw next impulse"}</button></div>`;
     if (state.activity_step === "movement") {
       const movingShip = state.ships.find((entry) => entry.id === state.pending_movement?.[0]);
-      if (!movingShip || movingShip.player !== player) return `<div class="control-stack">${activityStrip()}<p class="step-callout"><b>${movingShip?.name || "Another ship"}</b> moves next.</p><p class="step-help">${state.solo ? "Command AI is resolving its maneuver." : "Pass command and use the player switch above."}</p>${undoMovement}</div>`;
-      if (state.movement_stage === "after") return `<div class="control-stack">${activityStrip()}<p class="step-callout"><b>${movingShip.name} completed its normal movement.</b>Choose the special maneuver to execute, or clear the checkbox to continue.</p>${specialManeuverControls(movingShip, "after", true)}${undoMovement}</div>`;
+      const movement = movingShip ? movementIdentity(movingShip) : null;
+      const sequence = movement?.sequence ? `<span class="movement-sequence">${movement.sequence}</span>` : "";
+      if (!movingShip || movingShip.player !== player) return `<div class="control-stack">${activityStrip()}<p class="step-callout">${sequence}<b>${movement?.label || "Another ship"}</b> moves next.</p><p class="step-help">${state.solo ? "Command AI is resolving its maneuver." : "Pass command and use the player switch above."}</p>${undoMovement}</div>`;
+      if (state.movement_stage === "after") return `<div class="control-stack">${activityStrip()}<p class="step-callout">${sequence}<b>${movement.label} completed its normal movement.</b>Choose the special maneuver to execute, or clear the checkbox to continue.</p>${specialManeuverControls(movingShip, "after", true)}${undoMovement}</div>`;
       const labels = { forward: "Move forward", sideslip_left: "Side-slip port", sideslip_right: "Side-slip starboard", turn_left: "Turn 60° port", turn_right: "Turn 60° starboard", lose_movement: "Lose blocked movement" };
-      const options = (state.movement_options || []).map((maneuver) => `<button class="primary move-ship" data-maneuver="${maneuver}">${labels[maneuver]}</button>`).join("");
-      return `<div class="control-stack">${activityStrip()}<p class="step-callout"><b>${movingShip.name}</b> has a movement opportunity.</p><p class="step-help">Choose one highlighted destination or turn in place. Turn mode ${currentTurnMode(movingShip)}: ${movingShip.movement?.hexes_since_turn || 0} forward hexes accumulated.</p><div class="impulse-card"><span>Movement card</span><b>${(state.impulse_card || []).map((speed) => { const relationship = speedRelationship(speed); return `<i class="${relationship.className}">${speed}</i>`; }).join("<em>·</em>")}</b></div>${options}${specialManeuverControls(movingShip, "before")}${undoMovement}</div>`;
+      const options = (state.movement_options || []).map((maneuver) => `<button class="primary move-ship" data-maneuver="${maneuver}">${movement.multiple ? `Ship ${movingShip.fleet_index || 1} · ` : ""}${labels[maneuver]}</button>`).join("");
+      const nextNotice = movement.position < movement.total ? "Your next eligible ship will receive a separate movement choice." : "";
+      return `<div class="control-stack">${activityStrip()}<p class="step-callout">${sequence}<b>${movement.label}</b> has a movement opportunity.</p><p class="step-help">Choose one highlighted destination or turn in place. Turn mode ${currentTurnMode(movingShip)}: ${movingShip.movement?.hexes_since_turn || 0} forward hexes accumulated.${nextNotice ? ` ${nextNotice}` : ""}</p><div class="impulse-card"><span>Movement card</span><b>${(state.impulse_card || []).map((speed) => { const relationship = speedRelationship(speed); return `<i class="${relationship.className}">${speed}</i>`; }).join("<em>·</em>")}</b></div>${options}${specialManeuverControls(movingShip, "before")}${undoMovement}</div>`;
     }
     if (state.activity_step === "launch") {
       const launchers = ship.weapons.filter((weapon) => weapon.type === "missile" && !weapon.destroyed && !weapon.fired && weapon.ammo > 0);
@@ -561,6 +582,7 @@ export function mountMatch(root) {
       if (output) output.textContent = used;
     };
     const markAllocationDirty = () => {
+      allocationDrafts.set(ship.id, allocationPayload());
       const status = root.querySelector(`[data-command-ship-id="${ship?.id}"] small`);
       if (status) status.textContent = "Unsaved changes";
       const commit = root.querySelector(".commit-fleet");
@@ -573,15 +595,18 @@ export function mountMatch(root) {
     updateEnergyBudget();
     root.querySelector(".save-allocation")?.addEventListener("click", async () => {
       if (!await request("allocate", allocationPayload())) return;
+      allocationDrafts.delete(ship.id);
       const nextShip = state.ships.find((entry) => entry.player === player && !entry.destroyed && !entry.allocation_set);
-      if (nextShip) { activeShipId = nextShip.id; render(); }
+      if (nextShip) activeShipId = nextShip.id;
+      render();
     });
     root.querySelector(".commit-allocation")?.addEventListener("click", async () => {
       const payload = allocationPayload();
       if (!await request("allocate", payload)) return;
+      allocationDrafts.delete(ship.id);
       await request("lock_allocation");
     });
-    root.querySelector(".commit-fleet")?.addEventListener("click", () => request("lock_allocation"));
+    root.querySelector(".commit-fleet")?.addEventListener("click", async () => { if (await request("lock_allocation")) allocationDrafts.clear(); });
     root.querySelector(".advance")?.addEventListener("click", () => request("advance_impulse"));
     const dismissImpulseModal = () => {
       impulseModalOpen = false;

@@ -52,6 +52,28 @@ class MatchTest < ActiveSupport::TestCase
     assert_equal [human["id"], opponent["id"]], match.state["pending_movement"]
   end
 
+  test "one movement request advances only one of two same-speed player ships" do
+    state = ShatteredReach::RulesEngine.start(solo: true, player_one_ships: %w[aurelian_frigate aurelian_frigate], ai_match: "size")
+    human_ships = state["ships"].select { |ship| ship["player"] == "player_one" }
+    human_ships.each { |ship| ship["allocation"]["speed"] = 6 }
+    state["phase"] = "impulse"
+    state["impulse"] = 1
+    state["activity_step"] = "movement"
+    state["impulse_card"] = [4, 6, 8, 9, 11, 12]
+    state["pending_movement"] = human_ships.map { |ship| ship["id"] }
+    state["movement_options"] = ShatteredReach::RulesEngine.legal_movement_actions(state, human_ships.first["id"])
+    match = Match.create!(title: "Independent fleet movement", state: state)
+    positions_before = human_ships.to_h { |ship| [ship["id"], ship["position"].dup] }
+
+    match.apply!(player: "player_one", action: "move_ship", payload: { "ship_id" => human_ships.first["id"], "maneuver" => "forward" })
+
+    first, second = human_ships.map { |ship| match.state["ships"].find { |candidate| candidate["id"] == ship["id"] } }
+    refute_equal positions_before[first["id"]], first["position"]
+    assert_equal positions_before[second["id"]], second["position"]
+    assert_equal [second["id"]], match.state["pending_movement"]
+    assert_equal "movement", match.state["activity_step"]
+  end
+
   test "continuing beyond missile launch invalidates movement undo" do
     state = ShatteredReach::RulesEngine.start
     ship = state["ships"].first
